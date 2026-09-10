@@ -13,6 +13,7 @@ export const prerender = true;
 
 const PAGES = [
   { path: '/', changefreq: 'weekly', priority: '0.5' },
+  { path: '/entries', changefreq: 'weekly', priority: '0.6' },
   { path: '/about', changefreq: 'monthly', priority: '0.3' },
 ];
 

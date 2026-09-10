@@ -1,0 +1,66 @@
+---
+export const prerender = false;
+
+import Base from '../../../layouts/Base.astro';
+import { brandTitle } from '../../../lib/title';
+import {
+  optionalEntryBodyText,
+  publishingErrorResponse,
+  publishingHttpStatus,
+  railsLocaleFromPathLang,
+  resolvePublishingApi,
+  type PublishingResult,
+} from '../../../lib/publishing-api';
+import type { RailsEntry } from '../../../lib/rails-entries';
+
+const NO_STORE = 'no-store';
+const lang = railsLocaleFromPathLang(Astro.params.lang);
+const publicId = Astro.params.public_id;
+Astro.response.headers.set('Cache-Control', NO_STORE);
+
+let result: PublishingResult<RailsEntry>;
+if (lang === null || !publicId) {
+  result = { kind: 'not-found', upstreamStatus: 404 };
+} else {
+  try {
+    const api = resolvePublishingApi();
+    if ('kind' in api) {
+      result = api;
+    } else {
+      result = await api.fetchEntry(publicId, lang);
+    }
+  } catch {
+    result = { kind: 'internal-error' };
+  }
+}
+
+if (result.kind !== 'ok' || lang === null) {
+  return publishingErrorResponse(publishingHttpStatus(result), lang ?? 'en');
+}
+
+const entry = result.value;
+const bodyText = optionalEntryBodyText(entry.body);
+const description = entry.summary ?? entry.title;
+---
+<Base
+  locale={lang}
+  title={brandTitle(entry.title)}
+  description={description}
+  pagePath={`/entries/${encodeURIComponent(entry.public_id)}`}
+>
+  <main class="mx-auto grid w-full max-w-4xl flex-1 gap-6 px-6 py-12" id="main-content" tabindex="-1">
+    <article class="grid gap-6">
+      <h1 class="text-3xl leading-heading font-semibold">{entry.title}</h1>
+      {entry.summary && <p class="text-lg text-gray-700">{entry.summary}</p>}
+      {bodyText ? (
+        <p class="whitespace-pre-wrap">{bodyText}</p>
+      ) : (
+        <p class="text-gray-600">
+          {lang === 'ja'
+            ? '本文は構造化オブジェクトとして保持されています。公開レンダラーは body の固定スキーマを仮定しません。'
+            : 'The body is a structured object. The public renderer does not assume a frozen body schema.'}
+        </p>
+      )}
+    </article>
+  </main>
+</Base>

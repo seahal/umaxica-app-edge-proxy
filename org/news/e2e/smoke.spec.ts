@@ -12,6 +12,10 @@ const EN_HOME = 'The latest announcements';
 test('home ja renders inside the shell', async ({ page }) => {
   await page.goto('/ja/');
   await expect(page.getByRole('heading', { name: JA_HOME })).toBeVisible();
+  await expect(page.getByRole('link', { name: '公開エントリーを見る' })).toHaveAttribute(
+    'href',
+    '/ja/entries/',
+  );
   await expect(page.getByRole('banner').getByRole('link', { name: 'UMAXICA' })).toBeVisible();
   await expect(
     page.getByRole('navigation', { name: 'ユーティリティナビゲーション' }),

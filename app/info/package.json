@@ -34,10 +34,15 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "catalog:",
-    "@fontsource-variable/inter": "catalog:"
+    "@astrojs/react": "catalog:",
+    "@fontsource-variable/inter": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@orangeopensource/hurl": "catalog:",
     "@playwright/test": "catalog:",
     "@size-limit/file": "catalog:",

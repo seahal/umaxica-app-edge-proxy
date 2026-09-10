@@ -66,7 +66,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
       headers,
     });
   }
-  if (path === '/api/v0/health.json' || path === '/api/v0/revision.json') {
+  if (
+    path === '/api/v0/health.json' ||
+    path === '/api/v0/revision.json' ||
+    path === '/api/v0/entries'
+  ) {
     const headers = new Headers(secured.headers);
     headers.set('Cache-Control', 'no-store');
     headers.set('Content-Type', 'application/json; charset=utf-8');

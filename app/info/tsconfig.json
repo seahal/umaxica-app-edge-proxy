@@ -7,7 +7,8 @@
     "types": ["node", "vitest/globals"],
     "allowJs": true,
     "incremental": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
     "esModuleInterop": true,
     "resolveJsonModule": true,
     // The quality policy every deployment unit shares, byte-identical in all
@@ -56,6 +57,7 @@
     "cloudflare-env.d.ts",
     ".astro/types.d.ts",
     "src/**/*.ts",
+    "src/**/*.tsx",
     "test/**/*",
     "e2e/**/*",
     "*.ts",

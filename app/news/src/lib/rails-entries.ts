@@ -14,7 +14,9 @@ export const railsEntrySchema = z
     locale: z.enum(['ja', 'en']),
     title: z.string().min(1),
     summary: z.string().nullable(),
-    body: z.object({ text: z.string() }).loose(),
+    // Rails currently guarantees `body` as an object, not a frozen CMS schema.
+    // `body.text` may appear in seed data; it is not required here.
+    body: z.object({}).loose(),
     published_at: z.iso.datetime({ offset: true }),
     taxonomy: z.record(z.string(), z.unknown()),
   })

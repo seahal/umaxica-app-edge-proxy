@@ -575,6 +575,7 @@ describe('Astro content-surface title contract', () => {
     const pages = [
       `${workspace}/src/pages/ja/index.astro`,
       `${workspace}/src/pages/ja/about.astro`,
+      `${workspace}/src/pages/[lang]/entries/index.astro`,
       `${workspace}/src/layouts/StatusSplash.astro`,
       `${workspace}/src/pages/404.astro`,
     ];

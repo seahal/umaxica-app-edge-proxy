@@ -93,10 +93,11 @@ export default defineConfig({
     isolate: true,
     fileParallelism: true,
     // Bounded because up to four units run at once under the root `pnpm -r`
-    // fan-out (`--workspace-concurrency=4`); workspace concurrency x maxWorkers
-    // is the real worker ceiling and it must not track the 32-core host.
+    // fan-out (`--workspace-concurrency=1`); workspace concurrency x maxWorkers
+    // is the real worker ceiling. Bounded to 1 so this cgroup (pids.max=2048)
+    // can still spawn Vitest while other Node/Vite processes are running.
     minWorkers: 1,
-    maxWorkers: 2,
+    maxWorkers: 1,
     maxConcurrency: 4,
     mockReset: true,
     restoreMocks: true,

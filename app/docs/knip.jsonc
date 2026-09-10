@@ -8,16 +8,17 @@
   "entry": [
     "src/pages/**/*.{ts,astro}",
     "src/**/*.astro",
+    "src/**/*.tsx",
     "test/**/*.test.ts",
     "e2e/**/*.spec.ts",
     "test-astro/**/*.mjs"
   ],
 
-  "project": ["**/*.{ts,css,astro,mjs}"],
+  "project": ["**/*.{ts,tsx,css,astro,mjs}"],
 
   "astro": {
     "config": ["astro.config.mjs"],
-    "entry": ["src/pages/**/*.{astro,ts}", "src/content.config.ts"]
+    "entry": ["src/pages/**/*.{astro,ts}", "src/content.config.ts", "src/**/*.tsx"]
   },
 
   "exclude": ["catalogReferences"],

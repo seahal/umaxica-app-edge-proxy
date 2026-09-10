@@ -70,14 +70,13 @@ fails a surface that declares a binding its class is not allowed to hold.
 The three cores are classified `railsBackedVite` and the twelve public surfaces
 `railsBackedAstro` in `tools/workers-manifest.json`. All fifteen carry the VPC
 binding.
-On the twelve public surfaces the only thing that binding is used for today is
-`/health`: `src/lib/rails-client.ts` and `src/lib/rails-health.ts` verify Rails
-through Rails `GET /api/v0/health.json` (ADR 016) and map the result onto Edge's
-`text/plain` operational contract. **No public surface fetches content from
-Rails yet**, so the narrow contract above is a boundary that has not been tested
-against a real consumer.
-
-When content fetching lands, it lands inside that existing client rather than
-beside it, and `docs/caching-and-isr.md` is the open question that has to be
-answered in the same change — there is no caching layer in front of these
-surfaces today.
+On the twelve public surfaces the VPC binding is used for `/health` (ADR 016)
+and for **publishing pages**: `/{lang}/entries/` and `/{lang}/entries/{public_id}/`
+are on-demand Astro SSR routes that call the existing `getRailsClient()` on every
+request. Rails remains the publishing authority; the Rails API is unchanged;
+`public_id` is the URL identity. Language homes `/{lang}/` are prerendered SSG with a React island that fetches
+same-origin `GET /api/v0/entries` (Worker → VPC → Rails). `/{lang}/about/` stays
+static with no Rails hop. `/{lang}/` still links to `/{lang}/entries/`. There is no
+publishing SSG of Entry pages, no browser-side Rails fetch, and no
+application-level publishing cache in this phase (`docs/caching-and-isr.md`
+Phase 2 remains future work).

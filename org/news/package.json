@@ -34,7 +34,10 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "catalog:",
-    "@fontsource-variable/inter": "catalog:"
+    "@fontsource-variable/inter": "catalog:",
+    "@astrojs/react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
@@ -55,6 +58,8 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "catalog:"
+    "wrangler": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
   }
 }

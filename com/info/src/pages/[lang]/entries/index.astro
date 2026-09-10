@@ -1,0 +1,85 @@
+---
+export const prerender = false;
+
+import Base from '../../../layouts/Base.astro';
+import { brandTitle } from '../../../lib/title';
+import {
+  entriesIndexPath,
+  entryPublicPath,
+  publishingErrorResponse,
+  publishingHttpStatus,
+  railsLocaleFromPathLang,
+  resolvePublishingApi,
+  type PublishingResult,
+} from '../../../lib/publishing-api';
+import type { RailsEntriesPage } from '../../../lib/rails-entries';
+
+const COPY = {
+  ja: {
+    title: 'エントリー',
+    heading: '公開エントリー',
+    description: '公開されているエントリーの一覧です。',
+    empty: '公開エントリーはまだありません。',
+    next: '次のページ',
+  },
+  en: {
+    title: 'Entries',
+    heading: 'Published entries',
+    description: 'A list of published entries.',
+    empty: 'No published entries yet.',
+    next: 'Next page',
+  },
+} as const;
+
+const NO_STORE = 'no-store';
+const lang = railsLocaleFromPathLang(Astro.params.lang);
+Astro.response.headers.set('Cache-Control', NO_STORE);
+
+let result: PublishingResult<RailsEntriesPage>;
+if (lang === null) {
+  result = { kind: 'not-found', upstreamStatus: 404 };
+} else {
+  try {
+    const api = resolvePublishingApi();
+    if ('kind' in api) {
+      result = api;
+    } else {
+      const cursor = Astro.url.searchParams.get('cursor') ?? undefined;
+      result = await api.fetchEntriesPage(cursor === undefined ? { locale: lang } : { locale: lang, cursor });
+    }
+  } catch {
+    result = { kind: 'internal-error' };
+  }
+}
+
+if (result.kind !== 'ok' || lang === null) {
+  return publishingErrorResponse(publishingHttpStatus(result), lang ?? 'en');
+}
+
+const copy = COPY[lang];
+const page = result.value;
+---
+<Base locale={lang} title={brandTitle(copy.title)} description={copy.description} pagePath="/entries">
+  <main class="mx-auto grid w-full max-w-4xl flex-1 gap-6 px-6 py-12" id="main-content" tabindex="-1">
+    <h1 class="text-3xl leading-heading font-semibold">{copy.heading}</h1>
+    {page.data.length === 0 ? (
+      <p>{copy.empty}</p>
+    ) : (
+      <ul class="grid gap-4">
+        {page.data.map((entry) => (
+          <li>
+            <a class="text-lg font-medium underline" href={entryPublicPath(lang, entry.public_id)}>
+              {entry.title}
+            </a>
+            {entry.summary && <p class="text-gray-700">{entry.summary}</p>}
+          </li>
+        ))}
+      </ul>
+    )}
+    {page.page.has_more && page.page.next_cursor && (
+      <p>
+        <a class="underline" href={entriesIndexPath(lang, page.page.next_cursor)}>{copy.next}</a>
+      </p>
+    )}
+  </main>
+</Base>

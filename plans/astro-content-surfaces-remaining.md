@@ -2,7 +2,7 @@
 
 ## Status
 
-Working plan. **Not started.** Decisions live in `adr/015-public-content-surfaces-astro.md`. This file is the leftover implementation, not a new framework decision.
+Working plan. **Publishing SSR (Phase 3 Rails read) is in tree** as of 2026-09-10: all twelve units serve `/{lang}/entries/` and `/{lang}/entries/{public_id}/` as on-demand Astro SSR over the existing Workers VPC Rails client, keyed by `public_id`. Language homes redirect to the entries index. No application cache. Remaining Phase 3 items below are Content Collections, ETag/304, three-stream sitemaps, and structured-body rendering. Decisions live in `adr/015-public-content-surfaces-astro.md`.
 
 Astro / Edge only. Do not modify the Rails repository. Do not invent a frozen Rails path or JSON schema. Do not deploy without an explicit go-ahead. Do not start Phase 2 Workers Cache until Phase 1 document correctness is proven.
 
@@ -15,7 +15,8 @@ Recorded so the next pass does not re-migrate the framework.
 - ADR 004 stays Rejected. ADR 015 is Accepted for the framework split.
 - Workers VPC binding name `UMAXICA_APPS_EDGE_CF_WORKERS_VPC`. `/health` is a separate on-demand route from any future document fetch.
 - Manifest class `railsBackedAstro` and `checkAstroWorker()` in `tools/check-workers.mjs`.
-- Language in the URL: `/ja/…`, `/en/…` (`prefixDefaultLocale: true`). `/` negotiates and 302s. `<html lang>`, canonical, hreflang, `x-default` → `ja` on the current static pages.
+- Language in the URL: `/ja/…`, `/en/…` (`prefixDefaultLocale: true`). `/` negotiates and 302s. `/{lang}/` is SSG plus a React island that fetches same-origin `/api/v0/entries`; `/{lang}/about/` is static. `/{lang}/` links to `/{lang}/entries/`. `<html lang>`, canonical, hreflang, `x-default` → `ja` on the current static pages.
+- Publishing SSR: `/{lang}/entries/` and `/{lang}/entries/{public_id}/` fetch `GET /api/v0/entries` through the existing Rails client on every request (`prerender = false`). Rails API unchanged. No SSG of Entry identifiers. No browser-side Rails fetch. No application publishing cache.
 - Region **not** in the URL. No `/jp/`. `PUBLIC_REGION` at build time selects the canonical origin. That is an explicit change from a path-shaped `region × language` URL; see ADR 015 § i18n / region.
 - `robots.txt` exists (200). Body still points at `/sitemap.xml`, not the three-stream index.
 - One hand-written `/sitemap.xml` listing `/` and `/about` only.

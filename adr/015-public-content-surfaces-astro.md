@@ -1,6 +1,6 @@
 # ADR 015: The twelve public content surfaces run Astro, partially superseding ADR 013
 
-## Status: Accepted 2026-09-02 — framework cutover is in tree; the document CMS layer is not. Remaining work: `plans/astro-content-surfaces-remaining.md`
+## Status: Accepted 2026-09-02 — framework cutover is in tree. Publishing pages (2026-09-10): Rails-backed Astro SSR over Workers VPC is in all twelve units. Remaining work: `plans/astro-content-surfaces-remaining.md` (Content Collections, ETag/304, three-stream sitemap, Phase 2 cache).
 
 `{app,com,org}/{docs,help,info,news}` — twelve deployment units — move from
 TanStack Start to **Astro on Cloudflare Workers**, `output: 'static'` with a
@@ -222,6 +222,22 @@ prepare a search-island UI boundary but must not proxy search through SSR.
    `/sitemap.xml`; remaining work).
 4. **Sitemap** — three streams (`sitemap-index`, `sitemap-0`, `sitemap-dynamic`)
    replace the one hand-written `/sitemap.xml` (remaining work).
+
+## Publishing pages (implemented 2026-09-10)
+
+This is the document CMS slice that actually shipped. It does **not** change the Rails API.
+
+- **Rails** remains the durable publishing authority. Edge consumes the existing contract:
+  `GET /api/v0/entries?locale=`, `GET /api/v0/entries/:public_id?locale=`.
+- **`public_id`** is the resource identity. Public URLs are `/{lang}/entries/{public_id}/`. There is no slug lookup, no search API, and no collection scan to discover an Entry.
+- **Cloudflare Workers + Astro SSR.** Each publishing route is `export const prerender = false`. Hybrid `output: 'static'` is preserved for about/offline/404; publishing pages are on-demand.
+- **Every page request** fetches Rails through the existing Workers VPC Rails client (`getEdgeBindings()` → `getRailsClient()` → `UMAXICA_APPS_EDGE_CF_WORKERS_VPC`). No application cache, Workers Cache, ISR, or build-time content fetch.
+- **No browser-side Rails fetch.** The first HTML contains title, heading, summary, and (when `body.text` is a string) body text. `body` is validated as an object; `body.text` is not a frozen public contract.
+- **Language home** (`/{lang}/`) is prerendered SSG. It does not SSR Rails. A React island (`client:load`) fetches same-origin `GET /api/v0/entries?locale=` which the Worker answers through the existing VPC Rails client. The browser never calls a Rails origin. **About** (`/{lang}/about/`) stays static with no island. Global `/` still negotiates `Accept-Language` and 302s to `/ja/` or `/en/`.
+- **Index** `/{lang}/entries/` lists one Rails page (cursor query is honoured; the Worker does not crawl every cursor).
+- **Detail** `/{lang}/entries/{public_id}/` is addressable without visiting the index.
+- Cell check: `namespace` + `surface` must match the unit (e.g. `info`/`app`) or the response is `invalid-contract` (502).
+- Error mapping follows the existing Rails-client result kinds: 404 → 404; VPC missing/unreachable → 503; timeout → 504; Rails 5xx / invalid JSON / invalid contract / 401/403 / unexpected redirect → 502; 429 → 503; Astro throw → 500. Upstream bodies, hostnames, and `Set-Cookie` are not forwarded.
 
 ## Rails contract — recorded requirements, NOT settled here
 

@@ -36,8 +36,9 @@ repository から消え、置き換えも入っていない。したがって IS
 
 ## 未解決事項
 
-12 の公開系 surface は Rails からコンテンツを取得する実装がまだ入っていない。
-入る時点で、キャッシュ層をどこに置くかを改めて決める必要がある。選択肢は Next の
+12 の公開系 surface は `/{lang}/entries/` を毎リクエスト Rails SSR する。この
+フェーズでは application cache / Workers Cache / ISR は入れない。Phase 2 の
+キャッシュ層は correctness 確認後の別作業。選択肢は Next の
 ISR ではなくなったので、決め直しであって移植ではない:
 
 - **HTTP キャッシュ**(`Cache-Control: s-maxage` + Cloudflare の edge cache、

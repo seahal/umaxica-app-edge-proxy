@@ -1,5 +1,6 @@
 // @ts-check
 import cloudflare from '@astrojs/cloudflare';
+import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField } from 'astro/config';
 
@@ -7,8 +8,8 @@ import { defineConfig, envField } from 'astro/config';
  * Astro on Cloudflare Workers for this public content surface (adr/015).
  *
  * - `output: 'static'`. HTML routes prerender at build time. `/health`, the
- *   `/health/*` probes, `/api/v0/health.json`, `/revision`, `/api/v0/revision.json`, and `/` opt out with
- *   `export const prerender = false`.
+ *   `/health/*` probes, `/api/v0/health.json`, `/revision`, `/api/v0/revision.json`, `/`,
+ *   and `/{lang}/entries/**` opt out with `export const prerender = false`.
  * - Security headers live in `public/_headers`.
  * - Region (jp/us) is a build-time `PUBLIC_REGION` input.
  * - Language (ja/en) is a URL path prefix; `/` negotiates.
@@ -48,6 +49,8 @@ export default defineConfig({
   // This unit holds no session state; the adapter's KV session binding is inert
   // but declaring it off keeps the generated wrangler config honest.
   session: false,
+
+  integrations: [react()],
 
   build: {
     // Force every stylesheet to an external same-origin file so the CSP can be
