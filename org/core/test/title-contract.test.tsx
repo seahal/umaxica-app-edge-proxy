@@ -53,7 +53,7 @@ const documents = documentRoutes();
 const isIndex = (file: string) => file === '_page.index.tsx';
 
 beforeAll(() => {
-  setEnv({ RAILS_STAFF_ORIGIN: 'http://base.org.localhost:3000' });
+  setEnv({ RAILS_STAFF_BASE_ORIGIN: 'https://www.umaxica.org' });
 });
 
 describe('root route', () => {

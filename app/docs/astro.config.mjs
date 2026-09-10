@@ -1,6 +1,5 @@
 // @ts-check
 import cloudflare from '@astrojs/cloudflare';
-import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, envField } from 'astro/config';
 
@@ -50,8 +49,6 @@ export default defineConfig({
   // but declaring it off keeps the generated wrangler config honest.
   session: false,
 
-  integrations: [react()],
-
   build: {
     // Force every stylesheet to an external same-origin file so the CSP can be
     // `style-src 'self'` with no `'unsafe-inline'` and no per-build hash.
@@ -68,10 +65,10 @@ export default defineConfig({
         values: ['jp', 'us'],
         default: 'jp',
       }),
-      RAILS_STAFF_ORIGIN: envField.string({
+      RAILS_STAFF_BASE_ORIGIN: envField.string({
         context: 'server',
         access: 'secret',
-        default: 'http://base.org.localhost:3000',
+        default: 'https://www.umaxica.org',
       }),
     },
   },

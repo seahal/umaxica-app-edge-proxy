@@ -47,7 +47,7 @@
     "EDGE_ENV": "production",
     "NODE_ENV": "production",
     "BRAND_NAME": "UMAXICA",
-    "RAILS_STAFF_ORIGIN": "http://base.org.localhost:3000"
+    "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
   },
 
   // BOOTSTRAP: production points at the DEVELOPMENT VPC Service, on purpose.
@@ -85,7 +85,7 @@
         "EDGE_ENV": "cms_bootstrap",
         "NODE_ENV": "development",
         "BRAND_NAME": "UMAXICA",
-        "RAILS_STAFF_ORIGIN": "http://base.org.localhost:3000"
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"
@@ -133,7 +133,7 @@
         "EDGE_ENV": "local",
         "NODE_ENV": "development",
         "BRAND_NAME": "UMAXICA",
-        "RAILS_STAFF_ORIGIN": "http://base.org.localhost:3000"
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"
@@ -154,7 +154,7 @@
         "EDGE_ENV": "development",
         "NODE_ENV": "development",
         "BRAND_NAME": "UMAXICA",
-        "RAILS_STAFF_ORIGIN": "http://base.org.localhost:3000"
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       // The ordinary development loop reaches Rails over the real binding.
       //
@@ -207,7 +207,7 @@
         "EDGE_ENV": "vpc",
         "NODE_ENV": "development",
         "BRAND_NAME": "UMAXICA",
-        "RAILS_STAFF_ORIGIN": "http://base.org.localhost:3000"
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"
@@ -237,7 +237,7 @@
         "EDGE_ENV": "test",
         "NODE_ENV": "test",
         "BRAND_NAME": "UMAXICA",
-        "RAILS_STAFF_ORIGIN": "http://base.org.localhost:3000"
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"

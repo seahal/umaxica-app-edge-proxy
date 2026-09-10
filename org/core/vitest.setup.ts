@@ -7,4 +7,22 @@
  * matcher set either way — this changes only which declaration file picks it
  * up.
  */
+import { vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+
+/*
+ * `createServerFn` is an RPC bridge in the Vite/Start build. Vitest has no
+ * Start server, so the handler must run in-process. Other exports stay real.
+ */
+vi.mock('@tanstack/react-start', async (importOriginal) => {
+  const actual: unknown = await importOriginal();
+  if (typeof actual !== 'object' || actual === null) {
+    throw new Error('expected @tanstack/react-start to export an object');
+  }
+  return {
+    ...actual,
+    createServerFn: () => ({
+      handler: (fn: () => unknown) => fn,
+    }),
+  };
+});

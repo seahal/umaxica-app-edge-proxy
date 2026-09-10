@@ -5,15 +5,19 @@ import { PageMain } from '@/components/page-main';
 import { defaultLocale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 import { pageTitles } from '@/lib/page-titles';
+import { loadRailsStaffOrigin } from '@/lib/publishing-hub';
 import {
   PUBLISHING_AUDIENCES,
   PUBLISHING_SURFACES,
   managementIndexUrl,
 } from '@/lib/publishing-management';
-import { getRailsStaffOrigin } from '@/lib/rails-staff-origin';
 
 export const Route = createFileRoute('/_page/publishing')({
-  loader: () => getDictionary(defaultLocale),
+  loader: async () => {
+    const dict = await getDictionary(defaultLocale);
+    const origin = await loadRailsStaffOrigin();
+    return { dict, origin };
+  },
   head: () => ({ meta: [{ title: pageTitles.publishing }] }),
   component: PublishingPage,
 });
@@ -32,8 +36,7 @@ const AUDIENCE_LABEL: Record<(typeof PUBLISHING_AUDIENCES)[number], { ja: string
 };
 
 function PublishingPage() {
-  const dict = Route.useLoaderData();
-  const origin = getRailsStaffOrigin();
+  const { dict, origin } = Route.useLoaderData();
   const lang = defaultLocale;
 
   return (

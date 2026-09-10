@@ -165,6 +165,23 @@ describe('CMS Rails client', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('stops walking the index after a few pages instead of crawling the collection', async () => {
+    const missPage = (): RailsClientResult => ({
+      kind: 'ok',
+      status: 200,
+      response: Response.json({
+        data: [],
+        page: { next_cursor: 'again', has_more: true },
+      }),
+    });
+    const { cms, fetch } = client(missPage(), missPage(), missPage(), missPage());
+    await expect(cms.fetchDocument('ja', 'guide')).resolves.toEqual({
+      kind: 'not-found',
+      upstreamStatus: 404,
+    });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
   it('maps a missing slug on the index to a generic not-found', async () => {
     const { cms } = client({
       kind: 'ok',

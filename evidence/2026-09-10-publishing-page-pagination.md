@@ -12,9 +12,9 @@ Date: 2026-09-10
   `GET /api/v0/entries?locale={lang}` or `...&page=N`.
 - Malformed `?page=` values are HTTP 400, not rewritten to page 1.
 - Collection pages always link to
-  `{RAILS_STAFF_ORIGIN}/publishing/{surface}/{audience}/entries`.
+  `{RAILS_STAFF_BASE_ORIGIN}/publishing/{surface}/{audience}/entries`.
 - Entry pages always link to
-  `{RAILS_STAFF_ORIGIN}/publishing/{surface}/{audience}/entries/{public_id}/edit`.
+  `{RAILS_STAFF_BASE_ORIGIN}/publishing/{surface}/{audience}/entries/{public_id}/edit`.
 - `org/core` `/publishing` launches all 12 Rails indexes. Vitest: 363 passed.
 
 ## Commands
@@ -28,7 +28,10 @@ pnpm --dir org/news run lint:types
 pnpm --dir org/core run lint:types
 ```
 
-`pnpm --dir org/core run typecheck` still reports existing `ErrorRouteComponent`
-and `vitest.config.ts` `coverage.perFile` errors unrelated to this change.
-`pnpm --dir org/news run typecheck` reports the same pre-existing
-`coverage.perFile` error after the publishing tests type-check cleanly.
+Follow-up (same date): review findings addressed.
+
+- Vitest 5: `coverage.thresholds.perFile`, dropped `minWorkers`.
+- Astro knip: no empty `*.tsx` entry globs; unused React integration removed.
+- Spelling: encoded `public_id` via `encodeURIComponent`.
+- `org/core` `/publishing` reads `RAILS_STAFF_BASE_ORIGIN` in a `createServerFn` handler (`*.server.ts`), not in the client component. Build succeeds.
+- CMS slug lookup in `app/docs` walks at most 3 index pages.

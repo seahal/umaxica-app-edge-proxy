@@ -32,7 +32,7 @@ describe('page smoke', () => {
 
   it.each(PAGES)('%s renders a document with one main landmark', async (_label, path) => {
     if (path === '/publishing') {
-      setEnv({ RAILS_STAFF_ORIGIN: 'http://base.org.localhost:3000' });
+      setEnv({ RAILS_STAFF_BASE_ORIGIN: 'https://www.umaxica.org' });
     }
     const html = await renderDocument(path);
 
@@ -67,7 +67,7 @@ describe('page smoke', () => {
     ['/publishing', 'publishing'],
   ] as const)('%s renders its own heading', async (path, key) => {
     if (path === '/publishing') {
-      setEnv({ RAILS_STAFF_ORIGIN: 'http://base.org.localhost:3000' });
+      setEnv({ RAILS_STAFF_BASE_ORIGIN: 'https://www.umaxica.org' });
     }
     const dict = await getDictionary(defaultLocale);
     const html = await renderDocument(path);

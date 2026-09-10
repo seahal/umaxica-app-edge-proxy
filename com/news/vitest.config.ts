@@ -43,8 +43,9 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'text-summary'],
       // A small uncovered file must not hide behind a large covered one.
-      perFile: true,
+      // Vitest 5: per-file floors live on `thresholds`, not CoverageOptions.
       thresholds: {
+        perFile: true,
         branches: 100,
         functions: 100,
         lines: 100,
@@ -72,7 +73,7 @@ export default defineConfig({
     // fan-out (`--workspace-concurrency=1`); workspace concurrency x maxWorkers
     // is the real worker ceiling. Bounded to 1 so this cgroup (pids.max=2048)
     // can still spawn Vitest while other Node/Vite processes are running.
-    minWorkers: 1,
+    // Vitest 5 dropped `minWorkers`; `maxWorkers: 1` is the ceiling.
     maxWorkers: 1,
     maxConcurrency: 4,
     mockReset: true,

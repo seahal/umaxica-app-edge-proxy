@@ -41,14 +41,14 @@ member identity. Do not use database ids, slug, or `slug_id` in management URLs.
 
 Astro does not authenticate. Every collection page links to
 
-`{RAILS_STAFF_ORIGIN}/publishing/{surface}/{audience}/entries`
+`{RAILS_STAFF_BASE_ORIGIN}/publishing/{surface}/{audience}/entries`
 
 and every entry page links to
 
-`{RAILS_STAFF_ORIGIN}/publishing/{surface}/{audience}/entries/{public_id}/edit`
+`{RAILS_STAFF_BASE_ORIGIN}/publishing/{surface}/{audience}/entries/{public_id}/edit`
 
-Rails then signs the visitor in or denies access. `RAILS_STAFF_ORIGIN` is the
-browser-facing Base.Org origin (development: `http://base.org.localhost:3000`).
+Rails then signs the visitor in or denies access. `RAILS_STAFF_BASE_ORIGIN` is the
+browser-facing Base.Org origin (`https://www.umaxica.org/`).
 It is not the VPC binding or a `*.{app,com,org}.localhost` surface host.
 
 Surfaces are `info|docs|news|help`. Audiences are `app|com|org`.

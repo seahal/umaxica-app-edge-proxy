@@ -86,7 +86,7 @@ application-level publishing cache in this phase (`docs/caching-and-isr.md`
 Phase 2 remains future work).
 
 Public collection and entry pages always expose a Manage / Edit link to the
-browser-facing Rails Base.Org staff origin (`RAILS_STAFF_ORIGIN`), for example
+browser-facing Rails Base.Org staff origin (`RAILS_STAFF_BASE_ORIGIN`), for example
 `{origin}/publishing/{surface}/{audience}/entries` and
 `{origin}/publishing/{surface}/{audience}/entries/{public_id}/edit`. The link is
 not gated on Edge authentication. Rails performs sign-in and authorization after

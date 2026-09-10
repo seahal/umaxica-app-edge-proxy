@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { RAILS_STAFF_ORIGIN } from 'astro:env/server';
+import { RAILS_STAFF_BASE_ORIGIN } from 'astro:env/server';
 
 import Base from '../../../layouts/Base.astro';
 import { brandTitle } from '../../../lib/title';
@@ -75,7 +75,7 @@ if (result.kind !== 'ok' || lang === null) {
 const copy = COPY[lang];
 const page = result.value;
 const canonicalSearch = page.page.current > 1 ? `page=${String(page.page.current)}` : undefined;
-const manageHref = managementIndexUrl(RAILS_STAFF_ORIGIN, PUBLISHING_NAMESPACE, PUBLISHING_SURFACE);
+const manageHref = managementIndexUrl(RAILS_STAFF_BASE_ORIGIN, PUBLISHING_NAMESPACE, PUBLISHING_SURFACE);
 ---
 <Base
   locale={lang}

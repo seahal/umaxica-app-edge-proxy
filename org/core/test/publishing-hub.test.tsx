@@ -7,11 +7,11 @@ import { PUBLISHING_CELLS, managementIndexUrl } from '@/lib/publishing-managemen
 import { setEnv } from './__mocks__/cloudflare-workers';
 import { renderDocument } from './utils/routes';
 
-const ORIGIN = 'http://base.org.localhost:3000';
+const ORIGIN = 'https://www.umaxica.org';
 
 describe('publishing hub', () => {
   it('renders /publishing with twelve Rails management indexes', async () => {
-    setEnv({ RAILS_STAFF_ORIGIN: ORIGIN });
+    setEnv({ RAILS_STAFF_BASE_ORIGIN: ORIGIN });
     const dict = await getDictionary(defaultLocale);
     const html = await renderDocument('/publishing');
 

@@ -11,30 +11,30 @@ const VPC_SURFACE_HOST = /^(?:info|docs|news|help|core)\.(?:app|com|org)\.localh
 
 export function parseRailsStaffOrigin(raw: string | undefined): string {
   if (raw === undefined || raw.trim() === '') {
-    throw new Error('RAILS_STAFF_ORIGIN is not configured');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN is not configured');
   }
 
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    throw new Error('RAILS_STAFF_ORIGIN is not a valid URL');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN is not a valid URL');
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error('RAILS_STAFF_ORIGIN must be an http(s) origin');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN must be an http(s) origin');
   }
   if (url.username !== '' || url.password !== '') {
-    throw new Error('RAILS_STAFF_ORIGIN must not include credentials');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN must not include credentials');
   }
   if (url.pathname !== '/' && url.pathname !== '') {
-    throw new Error('RAILS_STAFF_ORIGIN must be an origin with no path');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN must be an origin with no path');
   }
   if (url.search !== '' || url.hash !== '') {
-    throw new Error('RAILS_STAFF_ORIGIN must be an origin with no query or fragment');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN must be an origin with no query or fragment');
   }
   if (VPC_SURFACE_HOST.test(url.host)) {
-    throw new Error('RAILS_STAFF_ORIGIN must not be a Worker-to-Rails VPC hostname');
+    throw new Error('RAILS_STAFF_BASE_ORIGIN must not be a Worker-to-Rails VPC hostname');
   }
 
   return url.origin;

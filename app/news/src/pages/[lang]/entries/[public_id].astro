@@ -1,7 +1,7 @@
 ---
 export const prerender = false;
 
-import { RAILS_STAFF_ORIGIN } from 'astro:env/server';
+import { RAILS_STAFF_BASE_ORIGIN } from 'astro:env/server';
 
 import Base from '../../../layouts/Base.astro';
 import { brandTitle } from '../../../lib/title';
@@ -51,7 +51,7 @@ const entry = result.value;
 const bodyText = optionalEntryBodyText(entry.body);
 const description = entry.summary ?? entry.title;
 const editHref = managementEditUrl(
-  RAILS_STAFF_ORIGIN,
+  RAILS_STAFF_BASE_ORIGIN,
   PUBLISHING_NAMESPACE,
   PUBLISHING_SURFACE,
   entry.public_id,

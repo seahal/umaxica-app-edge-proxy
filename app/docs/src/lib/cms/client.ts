@@ -19,7 +19,8 @@ const REASONS: readonly Exclude<TransportReason, 'unknown'>[] = [
   'rate_limited',
   'tls_certificate_error',
 ];
-const MAX_INDEX_PAGES = 100;
+// Cap slug→public_id index walks. A missing slug must not scan the full catalog.
+const MAX_INDEX_PAGES = 3;
 const INDEX_PAGE_LIMIT = 100;
 
 function reason(message: string): TransportReason {

@@ -9,7 +9,7 @@ import {
 } from '@/lib/publishing-management';
 import { parseRailsStaffOrigin } from '@/lib/rails-staff-origin';
 
-const ORIGIN = 'http://base.org.localhost:3000';
+const ORIGIN = 'https://www.umaxica.org';
 
 describe('Rails staff origin', () => {
   it('fails closed rather than constructing an invalid origin', () => {
