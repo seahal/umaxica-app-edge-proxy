@@ -90,7 +90,7 @@ catalog:
   # here changes what a test MEANS rather than whether it runs.
   '@testing-library/jest-dom': ^7.0.1
   '@testing-library/react': ^16.3.3
-  '@types/node': ^26.4.1
+  '@types/node': ^26.5.0
   '@types/react': ^19.2.18
   '@types/react-dom': ^19.2.7
   # React Fast Refresh and the JSX transform for the Vite-built units. The five
@@ -155,7 +155,7 @@ catalog:
   # Floor set by `@cloudflare/vite-plugin`'s peer range (^4.127.0), not chosen
   # independently. Bumping the plugin without bumping this is a resolution
   # failure rather than a subtle one.
-  wrangler: ^4.129.0
+  wrangler: ^4.129.1
 
 ignoredBuiltDependencies:
   - esbuild
