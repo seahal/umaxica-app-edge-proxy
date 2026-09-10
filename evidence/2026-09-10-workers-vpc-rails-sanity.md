@@ -24,11 +24,11 @@ on all fifteen.
 
 ## Commands
 
-| Command | Observed |
-| ------- | -------- |
-| `CLOUDFLARE_API_TOKEN= pnpm exec wrangler whoami --env-file tools/vpc-probe/empty.env` | OAuth Token, account `UMAXICA`, scope includes `connectivity (admin)` |
+| Command                                                                                          | Observed                                                                                            |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN= pnpm exec wrangler whoami --env-file tools/vpc-probe/empty.env`           | OAuth Token, account `UMAXICA`, scope includes `connectivity (admin)`                               |
 | `CLOUDFLARE_API_TOKEN= pnpm exec wrangler vpc service list --env-file tools/vpc-probe/empty.env` | `01a06fd0-…` (`umaxica-dev-rails-api`) and `019f5fe0-…` (`umaxica-apps-edge-cf-workers-vpc`) listed |
-| `CLOUDFLARE_API_TOKEN= node tools/verify-edge-connectivity.mjs vpc` | 15/15 PASS on Direct VPC → Rails, VPC identity, VPC contract; exit 0 |
+| `CLOUDFLARE_API_TOKEN= node tools/verify-edge-connectivity.mjs vpc`                              | 15/15 PASS on Direct VPC → Rails, VPC identity, VPC contract; exit 0                                |
 
 First pass in this session was **BLOCKED** (no OAuth). After `wrangler login`
 the same command produced the table above.

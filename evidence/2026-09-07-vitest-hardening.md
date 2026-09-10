@@ -58,13 +58,13 @@ plugin).
 
 The layer boundary from `AGENTS.md` is unchanged and refined:
 
-| Layer          | Tool                       | Answers                                            | Status |
-| -------------- | -------------------------- | ------------------------------------------------- | ------ |
-| Vitest Node    | Vitest + happy-dom         | internal/pure logic; impossible-to-observe paths  | hardened |
-| Vitest workerd | `@cloudflare/vitest-plugin`| Workers runtime APIs, bindings, isolation         | **deferred** (Vitest 5 peer conflict) |
-| Vitest Browser | `@vitest/browser-playwright` | isolated real-DOM component/focus/keyboard        | **deferred to an explicit decision** (see below) |
-| Hurl           | Hurl (`<unit>/api/`)       | real HTTP response contract                        | unchanged |
-| Playwright E2E | Playwright (`<unit>/e2e/`) | full browser user journey                          | unchanged |
+| Layer          | Tool                         | Answers                                          | Status                                           |
+| -------------- | ---------------------------- | ------------------------------------------------ | ------------------------------------------------ |
+| Vitest Node    | Vitest + happy-dom           | internal/pure logic; impossible-to-observe paths | hardened                                         |
+| Vitest workerd | `@cloudflare/vitest-plugin`  | Workers runtime APIs, bindings, isolation        | **deferred** (Vitest 5 peer conflict)            |
+| Vitest Browser | `@vitest/browser-playwright` | isolated real-DOM component/focus/keyboard       | **deferred to an explicit decision** (see below) |
+| Hurl           | Hurl (`<unit>/api/`)         | real HTTP response contract                      | unchanged                                        |
+| Playwright E2E | Playwright (`<unit>/e2e/`)   | full browser user journey                        | unchanged                                        |
 
 No HTTP-contract assertion was moved into Vitest. No assertion was duplicated
 across layers.
@@ -98,13 +98,13 @@ here. The setup when taken:
 
 All four mock modules are byte-identical across the units that use them.
 
-| Mock | Units | Class | Decision |
-| ---- | ----- | ----- | -------- |
-| `cloudflare:workers` (`env` proxy + `setEnv`/`resetEnv`) | 3 Cores, 12 Astro | **B** — intentional dependency-seam double: tests inject arbitrary binding shapes (VPC service, `REVISION`, `RATE_LIMITER`, none) that no Node environment supplies | keep |
-| `cloudflare:workers` — `setEnvShouldThrow` branch | same | **C** — simulates `env` being unavailable, a condition the mock's own comment notes cannot occur outside a request context; this is a workerd contract currently only asserted against a fake | keep for now; convert to a real missing-binding / real `env` assertion when the workerd layer lands |
-| `astro:env/client` (`PUBLIC_REGION`) | 12 Astro | **B** — Astro virtual module, resolvable only through the Astro/Vite pipeline; build-time constant | keep |
-| `astro:middleware` (`defineMiddleware` identity) | 12 Astro | **B** — Astro virtual module; identity passthrough is the real behaviour (type helper) | keep |
-| `@tanstack/react-start/server-only` (empty) | 3 Cores | **B** — side-effect marker whose only job is to fail the client bundle; empty is correct for Node | keep |
+| Mock                                                     | Units             | Class                                                                                                                                                                                         | Decision                                                                                            |
+| -------------------------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `cloudflare:workers` (`env` proxy + `setEnv`/`resetEnv`) | 3 Cores, 12 Astro | **B** — intentional dependency-seam double: tests inject arbitrary binding shapes (VPC service, `REVISION`, `RATE_LIMITER`, none) that no Node environment supplies                           | keep                                                                                                |
+| `cloudflare:workers` — `setEnvShouldThrow` branch        | same              | **C** — simulates `env` being unavailable, a condition the mock's own comment notes cannot occur outside a request context; this is a workerd contract currently only asserted against a fake | keep for now; convert to a real missing-binding / real `env` assertion when the workerd layer lands |
+| `astro:env/client` (`PUBLIC_REGION`)                     | 12 Astro          | **B** — Astro virtual module, resolvable only through the Astro/Vite pipeline; build-time constant                                                                                            | keep                                                                                                |
+| `astro:middleware` (`defineMiddleware` identity)         | 12 Astro          | **B** — Astro virtual module; identity passthrough is the real behaviour (type helper)                                                                                                        | keep                                                                                                |
+| `@tanstack/react-start/server-only` (empty)              | 3 Cores           | **B** — side-effect marker whose only job is to fail the client bundle; empty is correct for Node                                                                                             | keep                                                                                                |
 
 No mock is class **A** (obsolete because workerd now supplies the behaviour),
 because the Vitest layer has no workerd runtime yet. Nothing was removed.
@@ -112,7 +112,7 @@ because the Vitest layer has no workerd runtime yet. Nothing was removed.
 ## Coverage
 
 - Provider stays `@vitest/coverage-v8` on Vitest 5. The Istanbul switch is
-  bundled with the deferred workerd migration (Istanbul is only *required* where
+  bundled with the deferred workerd migration (Istanbul is only _required_ where
   a suite runs through `@cloudflare/vitest-plugin`, which cannot produce native
   V8 coverage). Running Istanbul now would re-instrument twenty green suites and
   re-tune twenty threshold sets for no correctness gain.
@@ -200,7 +200,7 @@ Five concurrency layers, bounded so the product does not explode:
 2. **Per-unit Vitest file workers** — `minWorkers: 1`, `maxWorkers: 2`,
    `fileParallelism: true`, `isolate: true`.
 3. **Same-file concurrency** — `maxConcurrency: 4`, but `sequence.concurrent:
-   false` by default; only the stress loop turns it on. No production test file
+false` by default; only the stress loop turns it on. No production test file
    is globally concurrent.
 4. **workerd process concurrency** — N/A (layer deferred).
 5. **Browser Mode file concurrency** — N/A (layer deferred).
@@ -215,16 +215,16 @@ maximum throughput at every layer).
 Host: 32 vCPU, 125 GiB RAM. Command timed: `pnpm -r --workspace-concurrency=<wc>
 run test` (twenty units; excludes root invariant suite). Two runs each, warm.
 
-| Config | wall (s) | CPU% | peak RSS (KiB) | result |
-| ------ | -------- | ---- | -------------- | ------ |
-| baseline `pnpm run test` (all units + invariants, implicit wc) | 12.3 | 1735 | ~279k | pass |
-| wc=1, default workers | 21.9 / 22.1 | ~820 | ~280k | pass |
-| wc=2, default workers | 14.8 / 14.7 | ~1350 | ~275k | pass |
-| **wc=4, default workers** | **10.9 / 11.0** | ~1940 | ~270k | pass |
-| wc=6, default workers | 10.9 / 10.8 | ~1970 | ~270k | pass |
-| wc=8, default workers | 10.3 / 9.9 | ~2150 | ~265k | pass |
-| wc=4, `maxWorkers: 2` (chosen) | 20.8 | ~706 | ~282k | pass |
-| full `pnpm run test`, wc=4, `maxWorkers: 2` (chosen, + invariants) | 21.9 | ~667 | ~282k | pass |
+| Config                                                             | wall (s)        | CPU%  | peak RSS (KiB) | result |
+| ------------------------------------------------------------------ | --------------- | ----- | -------------- | ------ |
+| baseline `pnpm run test` (all units + invariants, implicit wc)     | 12.3            | 1735  | ~279k          | pass   |
+| wc=1, default workers                                              | 21.9 / 22.1     | ~820  | ~280k          | pass   |
+| wc=2, default workers                                              | 14.8 / 14.7     | ~1350 | ~275k          | pass   |
+| **wc=4, default workers**                                          | **10.9 / 11.0** | ~1940 | ~270k          | pass   |
+| wc=6, default workers                                              | 10.9 / 10.8     | ~1970 | ~270k          | pass   |
+| wc=8, default workers                                              | 10.3 / 9.9      | ~2150 | ~265k          | pass   |
+| wc=4, `maxWorkers: 2` (chosen)                                     | 20.8            | ~706  | ~282k          | pass   |
+| full `pnpm run test`, wc=4, `maxWorkers: 2` (chosen, + invariants) | 21.9            | ~667  | ~282k          | pass   |
 
 Reading:
 

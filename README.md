@@ -290,12 +290,12 @@ compose.override.yaml          = optional, gitignored, yours
 compose.override.yaml.example  = documented example, tracked
 ```
 
-| File                            | Holds                                                                                                                                                                                 | Edit it?                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `compose.yaml`                  | the shared services — the Edge-owned `cloudflare-tunnel` connector, the networks and volumes — plus one dev-server service per workspace unit behind `profiles: [app]`                | only as a change that applies to everyone  |
+| File                            | Holds                                                                                                                                                                                                 | Edit it?                                   |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `compose.yaml`                  | the shared services — the Edge-owned `cloudflare-tunnel` connector, the networks and volumes — plus one dev-server service per workspace unit behind `profiles: [app]`                                | only as a change that applies to everyone  |
 | `.devcontainer/compose.yaml`    | `core`, the workspace container: the SELinux `label=disable`, the twenty published ports, the `GH_TOKEN` passthrough, `sleep infinity`. It lives here so a bare `podman compose up` does not start it | only as a change that applies to everyone  |
-| `compose.override.yaml`         | host-specific convenience only — an ssh-agent socket, a `known_hosts` bind, machine-local ports, experiments                                                                          | yes, freely; it is yours and is gitignored |
-| `compose.override.yaml.example` | a documented example of the above                                                                                                                                                     | only to change what the example teaches    |
+| `compose.override.yaml`         | host-specific convenience only — an ssh-agent socket, a `known_hosts` bind, machine-local ports, experiments                                                                                          | yes, freely; it is yours and is gitignored |
+| `compose.override.yaml.example` | a documented example of the above                                                                                                                                                                     | only to change what the example teaches    |
 
 **A fresh clone needs no override.** `compose.yaml` and
 `.devcontainer/compose.yaml` between them are a complete, supported development

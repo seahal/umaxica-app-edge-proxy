@@ -115,7 +115,8 @@ describe('Edge-owned tunnel connector', () => {
     expect(namesIn(composeDevcontainer)).toEqual(['core']);
 
     const alwaysStarted = namesIn(composeBase).filter((name) => {
-      const body = new RegExp(`^ {2}${name}:\n((?: {4}.*\n|\n)*)`, 'mu').exec(composeBase)?.[1] ?? '';
+      const body =
+        new RegExp(`^ {2}${name}:\n((?: {4}.*\n|\n)*)`, 'mu').exec(composeBase)?.[1] ?? '';
       return !body.includes('<<: *unit') && !body.includes('profiles:');
     });
     expect(alwaysStarted).toEqual(['cloudflare-tunnel']);
@@ -143,9 +144,7 @@ describe('Edge-owned tunnel connector', () => {
     // here; the optional override reaches only `scripts/dev-start` and a bare
     // `docker compose`. `compose-local-override-invariants.test.ts` proves every
     // listed entry is a tracked file.
-    expect(devcontainer).toContain(
-      '"dockerComposeFile": ["../compose.yaml", "./compose.yaml"]',
-    );
+    expect(devcontainer).toContain('"dockerComposeFile": ["../compose.yaml", "./compose.yaml"]');
     // Compose takes the project name from the last file that sets one, so a
     // divergent `name:` in an override forks the project away from
     // `compose.yaml` and `scripts/dev-start` — a second volume set, and a port

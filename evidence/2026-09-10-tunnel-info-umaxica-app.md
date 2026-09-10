@@ -12,18 +12,18 @@ dev server.
 
 ## Local origin (`Host: info.umaxica.app`)
 
-| URL | Status | Body |
-| --- | --- | --- |
-| `http://127.0.0.1:5403/` | 302 | `Location: http://info.umaxica.app/ja/` |
-| `http://127.0.0.1:5403/health` | 200 | `status/startup/liveness/readiness: ok` |
-| `http://127.0.0.1:5403/ja/` | 200 | HTML |
+| URL                            | Status | Body                                    |
+| ------------------------------ | ------ | --------------------------------------- |
+| `http://127.0.0.1:5403/`       | 302    | `Location: http://info.umaxica.app/ja/` |
+| `http://127.0.0.1:5403/health` | 200    | `status/startup/liveness/readiness: ok` |
+| `http://127.0.0.1:5403/ja/`    | 200    | HTML                                    |
 
 ## Public
 
-| URL | Status | Meaning |
-| --- | --- | --- |
-| `https://info.umaxica.app/` | 302 Access | Tunnel hostname is published; Access is in front (ADR 008) |
-| `https://info.umaxica.app/health` | 302 Access | same; `/health*` has no Bypass |
+| URL                               | Status     | Meaning                                                    |
+| --------------------------------- | ---------- | ---------------------------------------------------------- |
+| `https://info.umaxica.app/`       | 302 Access | Tunnel hostname is published; Access is in front (ADR 008) |
+| `https://info.umaxica.app/health` | 302 Access | same; `/health*` has no Bypass                             |
 
 Connector: `cloudflare-tunnel` `10.89.4.2`, cloudflared 2026.8.2,
 `GET http://cloudflare-tunnel:2000/ready` → `status:200`, 4 connections.

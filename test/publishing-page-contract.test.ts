@@ -26,7 +26,7 @@ describe('twelve-cell publishing contract', () => {
       expect(client).not.toContain('next_cursor');
       expect(client).not.toContain('has_more');
       expect(client).not.toContain('fetchAllEntries');
-      expect(client).not.toContain('query.set(\'offset\'');
+      expect(client).not.toContain("query.set('offset'");
 
       expect(api).toContain('parsePublicPageQuery');
       expect(api).not.toContain('cursor');

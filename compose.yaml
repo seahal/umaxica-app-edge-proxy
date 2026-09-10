@@ -74,9 +74,9 @@ x-unit: &unit
   # whichever entry point runs first populates it for the others; the twenty
   # services then find it already installed and `--frozen-lockfile` is a no-op.
   command:
-    - "sh"
-    - "-lc"
-    - "pnpm install --frozen-lockfile && exec pnpm run dev"
+    - 'sh'
+    - '-lc'
+    - 'pnpm install --frozen-lockfile && exec pnpm run dev'
   init: true
   userns_mode: keep-id:uid=1000,gid=1000
   security_opt:
@@ -92,7 +92,7 @@ x-unit: &unit
   # `no`, not `on-failure:N`: the failures a dev server actually hits -- a type
   # error, a bad import, a missing dependency -- are ones a restart repeats.
   # It stays stopped and visible instead.
-  restart: "no"
+  restart: 'no'
   logging:
     driver: json-file
     options:
@@ -132,105 +132,104 @@ x-unit: &unit
 services:
   com-apex:
     <<: *unit
-    working_dir: "/home/edge/workspace/com/apex"
+    working_dir: '/home/edge/workspace/com/apex'
     ports:
-      - "127.0.0.1:5101:5101"
+      - '127.0.0.1:5101:5101'
   com-info:
     <<: *unit
-    working_dir: "/home/edge/workspace/com/info"
+    working_dir: '/home/edge/workspace/com/info'
     ports:
-      - "127.0.0.1:5103:5103"
+      - '127.0.0.1:5103:5103'
   com-core:
     <<: *unit
-    working_dir: "/home/edge/workspace/com/core"
+    working_dir: '/home/edge/workspace/com/core'
     ports:
-      - "127.0.0.1:5105:5105"
+      - '127.0.0.1:5105:5105'
   com-docs:
     <<: *unit
-    working_dir: "/home/edge/workspace/com/docs"
+    working_dir: '/home/edge/workspace/com/docs'
     ports:
-      - "127.0.0.1:5106:5106"
+      - '127.0.0.1:5106:5106'
   com-news:
     <<: *unit
-    working_dir: "/home/edge/workspace/com/news"
+    working_dir: '/home/edge/workspace/com/news'
     ports:
-      - "127.0.0.1:5107:5107"
+      - '127.0.0.1:5107:5107'
   com-help:
     <<: *unit
-    working_dir: "/home/edge/workspace/com/help"
+    working_dir: '/home/edge/workspace/com/help'
     ports:
-      - "127.0.0.1:5108:5108"
+      - '127.0.0.1:5108:5108'
   net-apex:
     <<: *unit
-    working_dir: "/home/edge/workspace/net/apex"
+    working_dir: '/home/edge/workspace/net/apex'
     ports:
-      - "127.0.0.1:5201:5201"
+      - '127.0.0.1:5201:5201'
   org-apex:
     <<: *unit
-    working_dir: "/home/edge/workspace/org/apex"
+    working_dir: '/home/edge/workspace/org/apex'
     ports:
-      - "127.0.0.1:5301:5301"
+      - '127.0.0.1:5301:5301'
   org-info:
     <<: *unit
-    working_dir: "/home/edge/workspace/org/info"
+    working_dir: '/home/edge/workspace/org/info'
     ports:
-      - "127.0.0.1:5303:5303"
+      - '127.0.0.1:5303:5303'
   org-core:
     <<: *unit
-    working_dir: "/home/edge/workspace/org/core"
+    working_dir: '/home/edge/workspace/org/core'
     ports:
-      - "127.0.0.1:5305:5305"
+      - '127.0.0.1:5305:5305'
   org-docs:
     <<: *unit
-    working_dir: "/home/edge/workspace/org/docs"
+    working_dir: '/home/edge/workspace/org/docs'
     ports:
-      - "127.0.0.1:5306:5306"
+      - '127.0.0.1:5306:5306'
   org-news:
     <<: *unit
-    working_dir: "/home/edge/workspace/org/news"
+    working_dir: '/home/edge/workspace/org/news'
     ports:
-      - "127.0.0.1:5307:5307"
+      - '127.0.0.1:5307:5307'
   org-help:
     <<: *unit
-    working_dir: "/home/edge/workspace/org/help"
+    working_dir: '/home/edge/workspace/org/help'
     ports:
-      - "127.0.0.1:5308:5308"
+      - '127.0.0.1:5308:5308'
   app-apex:
     <<: *unit
-    working_dir: "/home/edge/workspace/app/apex"
+    working_dir: '/home/edge/workspace/app/apex'
     ports:
-      - "127.0.0.1:5401:5401"
+      - '127.0.0.1:5401:5401'
   app-info:
     <<: *unit
-    working_dir: "/home/edge/workspace/app/info"
+    working_dir: '/home/edge/workspace/app/info'
     ports:
-      - "127.0.0.1:5403:5403"
+      - '127.0.0.1:5403:5403'
   app-core:
     <<: *unit
-    working_dir: "/home/edge/workspace/app/core"
+    working_dir: '/home/edge/workspace/app/core'
     ports:
-      - "127.0.0.1:5405:5405"
+      - '127.0.0.1:5405:5405'
   app-docs:
     <<: *unit
-    working_dir: "/home/edge/workspace/app/docs"
+    working_dir: '/home/edge/workspace/app/docs'
     ports:
-      - "127.0.0.1:5406:5406"
+      - '127.0.0.1:5406:5406'
   app-news:
     <<: *unit
-    working_dir: "/home/edge/workspace/app/news"
+    working_dir: '/home/edge/workspace/app/news'
     ports:
-      - "127.0.0.1:5407:5407"
+      - '127.0.0.1:5407:5407'
   app-help:
     <<: *unit
-    working_dir: "/home/edge/workspace/app/help"
+    working_dir: '/home/edge/workspace/app/help'
     ports:
-      - "127.0.0.1:5408:5408"
+      - '127.0.0.1:5408:5408'
   dev-apex:
     <<: *unit
-    working_dir: "/home/edge/workspace/dev/apex"
+    working_dir: '/home/edge/workspace/dev/apex'
     ports:
-      - "127.0.0.1:5501:5501"
-
+      - '127.0.0.1:5501:5501'
 
   # Edge owns this connector and its tunnel. It is intentionally independent from the
   # Global/Rails connector: the two share neither a Podman network nor a tunnel token.

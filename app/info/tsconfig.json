@@ -8,7 +8,6 @@
     "allowJs": true,
     "incremental": true,
     "jsx": "react-jsx",
-    "jsxImportSource": "react",
     "esModuleInterop": true,
     "resolveJsonModule": true,
     // The quality policy every deployment unit shares, byte-identical in all
