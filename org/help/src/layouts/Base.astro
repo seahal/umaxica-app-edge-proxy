@@ -29,6 +29,11 @@ interface Props {
   /** The path with no locale prefix, e.g. `/` or `/about`. */
   pagePath: string;
   /**
+   * Canonical / hreflang query without `?`, e.g. `page=2`. Page 1 of a
+   * collection omits this so the natural URL stays `/{lang}/entries/`.
+   */
+  canonicalSearch?: string;
+  /**
    * A route that exists at a single URL with no locale prefix (the SW offline
    * fallback, the 404 document). No hreflang alternates; canonical is the page
    * itself.
@@ -36,12 +41,13 @@ interface Props {
   localeless?: boolean;
 }
 
-const { locale, title, description, pagePath, localeless = false } = Astro.props;
+const { locale, title, description, pagePath, localeless = false, canonicalSearch } = Astro.props;
 const t = SHELL[locale];
 
 // Content pages use the trailing-slash form for canonical / hreflang / nav.
 const normalizedPath = pagePath === '/' ? '' : pagePath.replace(/\/$/u, '');
-const localePath = (l: string) => `/${l}${normalizedPath}/`;
+const search = canonicalSearch ? `?${canonicalSearch}` : '';
+const localePath = (l: string) => `/${l}${normalizedPath}/${search}`;
 const canonical = localeless
   ? new URL(pagePath, CANONICAL_ORIGIN).href
   : new URL(localePath(locale), CANONICAL_ORIGIN).href;

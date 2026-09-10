@@ -18,6 +18,7 @@ export type PublishingResult<T> =
   | { kind: 'unreachable' }
   | { kind: 'timeout' }
   | { kind: 'invalid-contract'; upstreamStatus?: number }
+  | { kind: 'bad-request' }
   | { kind: 'not-configured' }
   | { kind: 'internal-error' };
 
@@ -34,14 +35,39 @@ export function entryPublicPath(lang: RailsLocale, publicId: string): string {
   return `/${lang}/entries/${encodeURIComponent(publicId)}/`;
 }
 
-export function entriesIndexPath(lang: RailsLocale, cursor?: string): string {
-  if (cursor === undefined) return `/${lang}/entries/`;
-  const query = new URLSearchParams({ cursor });
+export function entriesIndexPath(lang: RailsLocale, page?: number): string {
+  if (page === undefined || page === 1) return `/${lang}/entries/`;
+  const query = new URLSearchParams({ page: String(page) });
   return `/${lang}/entries/?${query.toString()}`;
+}
+
+export type PublicPageQuery =
+  | { kind: 'omitted' }
+  | { kind: 'ok'; page: number }
+  | { kind: 'invalid' };
+
+/**
+ * Untrusted `?page=` from the public URL. Only a positive integer is accepted.
+ * Malformed values are not rewritten to page 1.
+ */
+export function parsePublicPageQuery(raw: string | null): PublicPageQuery {
+  if (raw === null) return { kind: 'omitted' };
+  if (!/^[1-9][0-9]{0,8}$/u.test(raw)) return { kind: 'invalid' };
+  return { kind: 'ok', page: Number(raw) };
 }
 
 export function belongsToPublishingCell(entry: RailsEntry, cell: PublishingCell): boolean {
   return entry.namespace === cell.namespace && entry.surface === cell.surface;
+}
+
+function isRailsEntry(value: unknown): value is RailsEntry {
+  if (typeof value !== 'object' || value === null) return false;
+  const namespace: unknown = Reflect.get(value, 'namespace');
+  const surface: unknown = Reflect.get(value, 'surface');
+  const publicId: unknown = Reflect.get(value, 'public_id');
+  return (
+    typeof namespace === 'string' && typeof surface === 'string' && typeof publicId === 'string'
+  );
 }
 
 function cellForThisUnit(): PublishingCell {
@@ -55,9 +81,9 @@ function rejectForeignCell<T extends RailsEntry | RailsEntriesPage>(
   if (result.kind !== 'ok') return result;
   const value = result.value;
   const listed = Reflect.get(value, 'data');
-  const entries: RailsEntry[] = Array.isArray(listed) ? listed : [value as RailsEntry];
-  for (const entry of entries) {
-    if (!belongsToPublishingCell(entry, cell)) {
+  const candidates: unknown[] = Array.isArray(listed) ? listed : [value];
+  for (const candidate of candidates) {
+    if (!isRailsEntry(candidate) || !belongsToPublishingCell(candidate, cell)) {
       return { kind: 'invalid-contract', upstreamStatus: result.upstreamStatus };
     }
   }
@@ -79,8 +105,11 @@ export function publishingHttpStatus(result: PublishingResult<unknown>): number 
       return 500;
     case 'invalid-contract':
       return 502;
+    case 'bad-request':
+      return 400;
     case 'upstream-error':
       if (result.upstreamStatus === 429) return 503;
+      if (result.upstreamStatus === 400 || result.upstreamStatus === 422) return 400;
       return 502;
   }
 }

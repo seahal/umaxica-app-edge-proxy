@@ -29,27 +29,31 @@ interface Props {
   /** The path with no locale prefix, e.g. `/` or `/about`. */
   pagePath: string;
   /**
+   * Canonical / hreflang query without `?`, e.g. `page=2`. Page 1 of a
+   * collection omits this so the natural URL stays `/{lang}/entries/`.
+   */
+  canonicalSearch?: string;
+  /**
    * A route that exists at a single URL with no locale prefix (the SW offline
    * fallback, the 404 document). No hreflang alternates; canonical is the page
    * itself.
    */
   localeless?: boolean;
-  /** Locales known to have this document. Defaults to every supported locale. */
-  alternateLocales?: readonly Locale[];
 }
 
-const { locale, title, description, pagePath, localeless = false, alternateLocales = LOCALES } = Astro.props;
+const { locale, title, description, pagePath, localeless = false, canonicalSearch } = Astro.props;
 const t = SHELL[locale];
 
 // Content pages use the trailing-slash form for canonical / hreflang / nav.
 const normalizedPath = pagePath === '/' ? '' : pagePath.replace(/\/$/u, '');
-const localePath = (l: string) => `/${l}${normalizedPath}/`;
+const search = canonicalSearch ? `?${canonicalSearch}` : '';
+const localePath = (l: string) => `/${l}${normalizedPath}/${search}`;
 const canonical = localeless
   ? new URL(pagePath, CANONICAL_ORIGIN).href
   : new URL(localePath(locale), CANONICAL_ORIGIN).href;
 const alternates = localeless
   ? []
-  : alternateLocales.map((l) => ({ hreflang: l, href: new URL(localePath(l), CANONICAL_ORIGIN).href }));
+  : LOCALES.map((l) => ({ hreflang: l, href: new URL(localePath(l), CANONICAL_ORIGIN).href }));
 const xDefault = new URL(localePath(DEFAULT_LOCALE), CANONICAL_ORIGIN).href;
 ---
 <!doctype html>
@@ -61,9 +65,7 @@ const xDefault = new URL(localePath(DEFAULT_LOCALE), CANONICAL_ORIGIN).href;
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
     {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
-    {!localeless && alternateLocales.includes(DEFAULT_LOCALE) && (
-      <link rel="alternate" hreflang="x-default" href={xDefault} />
-    )}
+    {!localeless && <link rel="alternate" hreflang="x-default" href={xDefault} />}
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/favicon.ico" />
   </head>

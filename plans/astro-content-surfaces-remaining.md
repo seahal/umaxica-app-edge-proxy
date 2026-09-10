@@ -16,7 +16,7 @@ Recorded so the next pass does not re-migrate the framework.
 - Workers VPC binding name `UMAXICA_APPS_EDGE_CF_WORKERS_VPC`. `/health` is a separate on-demand route from any future document fetch.
 - Manifest class `railsBackedAstro` and `checkAstroWorker()` in `tools/check-workers.mjs`.
 - Language in the URL: `/ja/…`, `/en/…` (`prefixDefaultLocale: true`). `/` negotiates and 302s. `/{lang}/` is SSG plus a React island that fetches same-origin `/api/v0/entries`; `/{lang}/about/` is static. `/{lang}/` links to `/{lang}/entries/`. `<html lang>`, canonical, hreflang, `x-default` → `ja` on the current static pages.
-- Publishing SSR: `/{lang}/entries/` and `/{lang}/entries/{public_id}/` fetch `GET /api/v0/entries` through the existing Rails client on every request (`prerender = false`). Rails API unchanged. No SSG of Entry identifiers. No browser-side Rails fetch. No application publishing cache.
+- Publishing SSR: `/{lang}/entries/` and `/{lang}/entries/{public_id}/` fetch `GET /api/v0/entries` through the existing Rails client on every request (`prerender = false`). Collection pagination is `?page=N` (Rails Pagy). No SSG of Entry identifiers. No browser-side Rails fetch. No application publishing cache. Public pages link to Rails management URLs; `org/core` `/publishing` is the operator hub.
 - Region **not** in the URL. No `/jp/`. `PUBLIC_REGION` at build time selects the canonical origin. That is an explicit change from a path-shaped `region × language` URL; see ADR 015 § i18n / region.
 - `robots.txt` exists (200). Body still points at `/sitemap.xml`, not the three-stream index.
 - One hand-written `/sitemap.xml` listing `/` and `/about` only.

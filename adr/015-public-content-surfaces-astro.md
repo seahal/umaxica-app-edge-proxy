@@ -1,6 +1,6 @@
 # ADR 015: The twelve public content surfaces run Astro, partially superseding ADR 013
 
-## Status: Accepted 2026-09-02 — framework cutover is in tree. Publishing pages (2026-09-10): Rails-backed Astro SSR over Workers VPC is in all twelve units. Remaining work: `plans/astro-content-surfaces-remaining.md` (Content Collections, ETag/304, three-stream sitemap, Phase 2 cache).
+## Status: Accepted 2026-09-02 — framework cutover is in tree. Publishing pages (2026-09-10): Rails-backed Astro SSR over Workers VPC is in all twelve units. Collection pagination (2026-09-10): public `?page=N` is forwarded to Rails Pagy as `GET /api/v0/entries?locale={lang}&page=N`. The earlier cursor/`next_cursor`/`has_more` publishing collection contract is superseded for these surfaces. Remaining work: `plans/astro-content-surfaces-remaining.md` (Content Collections, ETag/304, three-stream sitemap, Phase 2 cache).
 
 `{app,com,org}/{docs,help,info,news}` — twelve deployment units — move from
 TanStack Start to **Astro on Cloudflare Workers**, `output: 'static'` with a

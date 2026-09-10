@@ -4,7 +4,6 @@
  * `src/routes/index.tsx`. `src/i18n.ts` holds only the shared shell vocabulary.
  */
 import PageHero from '../../components/PageHero.astro';
-import PublishedEntries from '../../islands/PublishedEntries.tsx';
 import Base from '../../layouts/Base.astro';
 import { type Locale, type PageCopy } from '../../i18n';
 import { brandTitle } from '../../lib/title';
@@ -41,5 +40,4 @@ const copy = COPY[lang];
   actionHref="/ja/entries/"
   actionLabel="公開エントリーを見る"
 />
-  <PublishedEntries client:load locale="ja" />
 </Base>

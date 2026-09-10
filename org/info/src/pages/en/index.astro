@@ -5,7 +5,6 @@
  * shell vocabulary every frame shares.
  */
 import PageHero from '../../components/PageHero.astro';
-import PublishedEntries from '../../islands/PublishedEntries.tsx';
 import Base from '../../layouts/Base.astro';
 import { type Locale, type PageCopy } from '../../i18n';
 import { brandTitle } from '../../lib/title';
@@ -42,5 +41,4 @@ const copy = COPY[lang];
   actionHref="/en/entries/"
   actionLabel="View published entries"
 />
-  <PublishedEntries client:load locale="en" />
 </Base>

@@ -2,10 +2,11 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { ErrorDocument } from '@/components/status-documents';
 
+import { setEnv } from './__mocks__/cloudflare-workers';
 import { headTitleOf, renderDocument, rootRoute } from './utils/routes';
 import { expectTitleContract, FORBIDDEN_TOKEN, TLD } from './utils/title-contract';
 
@@ -50,6 +51,10 @@ function documentRoutes(): { file: string; path: string }[] {
 
 const documents = documentRoutes();
 const isIndex = (file: string) => file === '_page.index.tsx';
+
+beforeAll(() => {
+  setEnv({ RAILS_STAFF_ORIGIN: 'http://base.org.localhost:3000' });
+});
 
 describe('root route', () => {
   // Load-bearing: `<HeadContent />` renders the head tags of every matched route

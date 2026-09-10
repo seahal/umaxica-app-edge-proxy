@@ -34,8 +34,8 @@
   },
   "dependencies": {
     "@astrojs/cloudflare": "catalog:",
-    "@fontsource-variable/inter": "catalog:",
     "@astrojs/react": "catalog:",
+    "@fontsource-variable/inter": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:"
   },
@@ -46,6 +46,8 @@
     "@size-limit/file": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "astro": "catalog:",
     "happy-dom": "catalog:",
@@ -58,8 +60,6 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:"
+    "wrangler": "catalog:"
   }
 }

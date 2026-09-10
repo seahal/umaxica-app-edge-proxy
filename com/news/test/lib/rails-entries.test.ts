@@ -16,6 +16,11 @@ const entry = {
   taxonomy: {},
 };
 
+const firstPage = {
+  data: [entry],
+  page: { current: 1, previous: null, next: 2, last: 3 },
+};
+
 function client(...results: RailsClientResult[]) {
   const fetch = vi.fn(() =>
     Promise.resolve(results.shift() ?? { kind: 'invalid-path', reason: 'test result missing' }),
@@ -31,8 +36,7 @@ describe('Rails entries client', () => {
         kind: 'ok',
         status: 200,
         response: Response.json({
-          data: [entry],
-          page: { next_cursor: null, has_more: false },
+          ...firstPage,
           ignored_by_client: true,
         }),
       },
@@ -43,22 +47,31 @@ describe('Rails entries client', () => {
     ).resolves.toMatchObject({
       kind: 'ok',
     });
-    await expect(
-      entries.fetchEntriesPage({ locale: 'ja', limit: 20, cursor: 'after one' }),
-    ).resolves.toMatchObject({
+    await expect(entries.fetchEntriesPage({ locale: 'ja', page: 2 })).resolves.toMatchObject({
       kind: 'ok',
     });
 
     expect(fetch).toHaveBeenNthCalledWith(1, '/api/v0/entries/id%2F-safe%20space%3F?locale=ja', {
       headers: { Accept: 'application/json' },
     });
-    expect(fetch).toHaveBeenNthCalledWith(
-      2,
-      '/api/v0/entries?locale=ja&limit=20&cursor=after+one',
-      {
-        headers: { Accept: 'application/json' },
-      },
-    );
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/v0/entries?locale=ja&page=2', {
+      headers: { Accept: 'application/json' },
+    });
+  });
+
+  it('omits page when requesting the first collection page', async () => {
+    const { entries, fetch } = client({
+      kind: 'ok',
+      status: 200,
+      response: Response.json(firstPage),
+    });
+
+    await expect(entries.fetchEntriesPage({ locale: 'ja' })).resolves.toMatchObject({ kind: 'ok' });
+    expect(fetch).toHaveBeenCalledWith('/api/v0/entries?locale=ja', {
+      headers: { Accept: 'application/json' },
+    });
+    expect(JSON.stringify(fetch.mock.calls)).not.toContain('cursor');
+    expect(JSON.stringify(fetch.mock.calls)).not.toContain('offset');
   });
 
   it('parses valid entries and tolerates additive response fields', async () => {
@@ -125,37 +138,23 @@ describe('Rails entries client', () => {
     });
   });
 
-  it('follows cursor pages and stops at has_more false', async () => {
-    const second = { ...entry, public_id: 'entry-2' };
-    const { entries, fetch } = client(
-      {
-        kind: 'ok',
-        status: 200,
-        response: Response.json({ data: [entry], page: { next_cursor: 'next/2', has_more: true } }),
-      },
-      {
-        kind: 'ok',
-        status: 200,
-        response: Response.json({ data: [second], page: { next_cursor: null, has_more: false } }),
-      },
-    );
-
-    await expect(entries.fetchAllEntries({ locale: 'ja' })).resolves.toMatchObject({
+  it('rejects a cursor-era collection envelope', async () => {
+    const { entries, fetch } = client({
       kind: 'ok',
-      value: [entry, second],
+      status: 200,
+      response: Response.json({
+        data: [entry],
+        page: { next_cursor: 'next/2', has_more: true },
+      }),
     });
-    expect(fetch).toHaveBeenNthCalledWith(1, '/api/v0/entries?locale=ja', {
-      headers: { Accept: 'application/json' },
+
+    await expect(entries.fetchEntriesPage({ locale: 'ja' })).resolves.toMatchObject({
+      kind: 'invalid-contract',
     });
-    expect(fetch).toHaveBeenNthCalledWith(2, '/api/v0/entries?locale=ja&cursor=next%2F2', {
-      headers: { Accept: 'application/json' },
-    });
+    expect(JSON.stringify(fetch.mock.calls)).not.toContain('cursor');
   });
 
   it('maps an invalid-path client result to upstream-error without its reason', async () => {
-    // `invalid-path` is the transport refusing to build a request at all. It is
-    // not a Rails answer, so there is no upstream status to report, and the
-    // reason string is internal — the client seam is the only way to produce it.
     const { entries } = client({ kind: 'invalid-path', reason: 'path must not be empty' });
 
     const result = await entries.fetchEntry({ publicId: 'entry-1', locale: 'ja' });
@@ -164,52 +163,10 @@ describe('Rails entries client', () => {
     expect(JSON.stringify(result)).not.toContain('path must not be empty');
   });
 
-  it('abandons pagination at the first page that is not ok, keeping that page\u2019s outcome', async () => {
-    // The first page succeeds and asks for a second, which fails. Collecting
-    // entries must stop there and answer with the failing page's own result
-    // rather than the partial list gathered so far.
-    const { entries, fetch } = client(
-      {
-        kind: 'ok',
-        status: 200,
-        response: Response.json({ data: [entry], page: { next_cursor: 'next/2', has_more: true } }),
-      },
-      { kind: 'http-error', status: 503, response: new Response('down', { status: 503 }) },
-    );
-
-    const result = await entries.fetchAllEntries({ locale: 'ja' });
-
-    expect(result).toEqual({ kind: 'upstream-error', upstreamStatus: 503 });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(result)).not.toContain('entry-1');
-  });
-
-  it('rejects malformed cursor envelopes and bounds malformed infinite pagination', async () => {
-    const missingCursor = client({
-      kind: 'ok',
-      status: 200,
-      response: Response.json({ data: [entry], page: { next_cursor: null, has_more: true } }),
-    });
-    await expect(missingCursor.entries.fetchAllEntries({ locale: 'ja' })).resolves.toMatchObject({
-      kind: 'invalid-contract',
-    });
-
-    const page = {
-      kind: 'ok' as const,
-      status: 200,
-      response: Response.json({ data: [entry], page: { next_cursor: 'again', has_more: true } }),
-    };
-    const infinite = client(...Array.from({ length: 101 }, () => page));
-    await expect(infinite.entries.fetchAllEntries({ locale: 'ja' })).resolves.toEqual({
-      kind: 'invalid-contract',
-    });
-    expect(infinite.fetch).toHaveBeenCalledTimes(100);
-  });
-
-  it('does not offer arbitrary paths or origins, and rejects invalid page limits before calling Rails', async () => {
+  it('does not offer arbitrary paths or origins, and rejects a non-positive page before calling Rails', async () => {
     const { entries, fetch } = client({ kind: 'ok', status: 200, response: Response.json(entry) });
 
-    await expect(entries.fetchEntriesPage({ locale: 'ja', limit: 101 })).resolves.toEqual({
+    await expect(entries.fetchEntriesPage({ locale: 'ja', page: 0 })).resolves.toEqual({
       kind: 'invalid-contract',
     });
     expect(fetch).not.toHaveBeenCalled();

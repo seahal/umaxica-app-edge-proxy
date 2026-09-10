@@ -6,6 +6,11 @@
   "messages": { "title": "Messages", "wip": "Work in progress" },
   "notifications": { "title": "Notifications", "wip": "Work in progress" },
   "about": { "title": "About" },
+  "publishing": {
+    "title": "Publishing",
+    "intro": "Publishing content is managed in the authenticated Rails Publishing CMS. This page only launches the twelve management indexes. Rails owns create, update, revisions, publication, archive, and authorization.",
+    "manage": "Open in Rails"
+  },
   "nav": {
     "skip": "Skip to main content",
     "menu": "Menu",

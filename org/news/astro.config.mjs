@@ -66,6 +66,11 @@ export default defineConfig({
         values: ['jp', 'us'],
         default: 'jp',
       }),
+      RAILS_STAFF_ORIGIN: envField.string({
+        context: 'server',
+        access: 'secret',
+        default: 'http://base.org.localhost:3000',
+      }),
     },
   },
 

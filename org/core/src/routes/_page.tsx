@@ -51,6 +51,7 @@ function PageLayout() {
     { to: '/messages', label: dict.messages.title },
     { to: '/notifications', label: dict.notifications.title },
     { to: '/configuration', label: dict.configuration.title },
+    { to: '/publishing', label: dict.publishing.title },
     { to: '/about', label: dict.about.title },
   ] as const;
 

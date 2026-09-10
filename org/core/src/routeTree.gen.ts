@@ -23,6 +23,7 @@ import { Route as PageExploreRouteImport } from './routes/_page.explore'
 import { Route as PageHomeRouteImport } from './routes/_page.home'
 import { Route as PageMessagesRouteImport } from './routes/_page.messages'
 import { Route as PageNotificationsRouteImport } from './routes/_page.notifications'
+import { Route as PagePublishingRouteImport } from './routes/_page.publishing'
 import { Route as HealthLivenessesRouteImport } from './routes/health.livenesses'
 import { Route as HealthReadinessesRouteImport } from './routes/health.readinesses'
 import { Route as HealthStartupsRouteImport } from './routes/health.startups'
@@ -100,6 +101,11 @@ const PageNotificationsRoute = PageNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => PageRoute,
 } as any)
+const PagePublishingRoute = PagePublishingRouteImport.update({
+  id: '/publishing',
+  path: '/publishing',
+  getParentRoute: () => PageRoute,
+} as any)
 const HealthLivenessesRoute = HealthLivenessesRouteImport.update({
   id: '/livenesses',
   path: '/livenesses',
@@ -151,6 +157,7 @@ export interface FileRoutesByFullPath {
   '/home': typeof PageHomeRoute
   '/messages': typeof PageMessagesRoute
   '/notifications': typeof PageNotificationsRoute
+  '/publishing': typeof PagePublishingRoute
   '/health/livenesses': typeof HealthLivenessesRoute
   '/health/readinesses': typeof HealthReadinessesRoute
   '/health/startups': typeof HealthStartupsRoute
@@ -172,6 +179,7 @@ export interface FileRoutesByTo {
   '/home': typeof PageHomeRoute
   '/messages': typeof PageMessagesRoute
   '/notifications': typeof PageNotificationsRoute
+  '/publishing': typeof PagePublishingRoute
   '/health/livenesses': typeof HealthLivenessesRoute
   '/health/readinesses': typeof HealthReadinessesRoute
   '/health/startups': typeof HealthStartupsRoute
@@ -196,6 +204,7 @@ export interface FileRoutesById {
   '/_page/home': typeof PageHomeRoute
   '/_page/messages': typeof PageMessagesRoute
   '/_page/notifications': typeof PageNotificationsRoute
+  '/_page/publishing': typeof PagePublishingRoute
   '/health/livenesses': typeof HealthLivenessesRoute
   '/health/readinesses': typeof HealthReadinessesRoute
   '/health/startups': typeof HealthStartupsRoute
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/messages'
     | '/notifications'
+    | '/publishing'
     | '/health/livenesses'
     | '/health/readinesses'
     | '/health/startups'
@@ -242,6 +252,7 @@ export interface FileRouteTypes {
     | '/home'
     | '/messages'
     | '/notifications'
+    | '/publishing'
     | '/health/livenesses'
     | '/health/readinesses'
     | '/health/startups'
@@ -265,6 +276,7 @@ export interface FileRouteTypes {
     | '/_page/home'
     | '/_page/messages'
     | '/_page/notifications'
+    | '/_page/publishing'
     | '/health/livenesses'
     | '/health/readinesses'
     | '/health/startups'
@@ -387,6 +399,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PageNotificationsRouteImport
       parentRoute: typeof PageRoute
     }
+    '/_page/publishing': {
+      id: '/_page/publishing'
+      path: '/publishing'
+      fullPath: '/publishing'
+      preLoaderRoute: typeof PagePublishingRouteImport
+      parentRoute: typeof PageRoute
+    }
     '/health/livenesses': {
       id: '/health/livenesses'
       path: '/livenesses'
@@ -446,6 +465,7 @@ interface PageRouteChildren {
   PageHomeRoute: typeof PageHomeRoute
   PageMessagesRoute: typeof PageMessagesRoute
   PageNotificationsRoute: typeof PageNotificationsRoute
+  PagePublishingRoute: typeof PagePublishingRoute
   PageIndexRoute: typeof PageIndexRoute
   PageConfigurationAccountRoute: typeof PageConfigurationAccountRoute
   PageConfigurationIndexRoute: typeof PageConfigurationIndexRoute
@@ -458,6 +478,7 @@ const PageRouteChildren: PageRouteChildren = {
   PageHomeRoute: PageHomeRoute,
   PageMessagesRoute: PageMessagesRoute,
   PageNotificationsRoute: PageNotificationsRoute,
+  PagePublishingRoute: PagePublishingRoute,
   PageIndexRoute: PageIndexRoute,
   PageConfigurationAccountRoute: PageConfigurationAccountRoute,
   PageConfigurationIndexRoute: PageConfigurationIndexRoute,

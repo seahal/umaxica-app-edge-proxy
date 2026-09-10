@@ -163,7 +163,7 @@ describe('application shell', () => {
     /*
      * "First focusable element in the document" is the requirement, not "first
      * link" — and it matters most on this archetype, where the alternative is
-     * tabbing past the brand, the menu trigger and six navigation entries. The
+     * tabbing past the brand, the menu trigger and seven navigation entries. The
      * selector is every element that can take focus, so anything inserted ahead
      * of the skip link later fails here rather than silently demoting it.
      */
@@ -208,7 +208,15 @@ describe('application shell', () => {
     expect(hrefs).not.toContain('/rails-health');
 
     expect(new Set(hrefs)).toEqual(
-      new Set(['/', '/explore', '/messages', '/notifications', '/configuration', '/about']),
+      new Set([
+        '/',
+        '/explore',
+        '/messages',
+        '/notifications',
+        '/configuration',
+        '/publishing',
+        '/about',
+      ]),
     );
 
     // The head links are still expected — they are simply not navigation, and

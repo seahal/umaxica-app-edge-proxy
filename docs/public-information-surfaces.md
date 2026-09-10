@@ -73,10 +73,24 @@ binding.
 On the twelve public surfaces the VPC binding is used for `/health` (ADR 016)
 and for **publishing pages**: `/{lang}/entries/` and `/{lang}/entries/{public_id}/`
 are on-demand Astro SSR routes that call the existing `getRailsClient()` on every
-request. Rails remains the publishing authority; the Rails API is unchanged;
-`public_id` is the URL identity. Language homes `/{lang}/` are prerendered SSG with a React island that fetches
-same-origin `GET /api/v0/entries` (Worker → VPC → Rails). `/{lang}/about/` stays
-static with no Rails hop. `/{lang}/` still links to `/{lang}/entries/`. There is no
+request. Rails remains the publishing authority for persistence, management UI,
+create/update, revisions, publication, archive, and authorization. Astro is
+anonymous and read-only. Collection pagination is page-based: `/{lang}/entries/?page=N`
+causes Edge to request `GET /api/v0/entries?locale={lang}&page=N`. Edge does not
+calculate SQL OFFSET; Pagy is a Rails implementation detail. Page 1 is
+`/{lang}/entries/`. Identity is `public_id` on both the public URL and the Rails
+management member URL. Language homes `/{lang}/` are prerendered SSG and link to
+`/{lang}/entries/`. `/{lang}/about/` stays static with no Rails hop. There is no
 publishing SSG of Entry pages, no browser-side Rails fetch, and no
 application-level publishing cache in this phase (`docs/caching-and-isr.md`
 Phase 2 remains future work).
+
+Public collection and entry pages always expose a Manage / Edit link to the
+browser-facing Rails Base.Org staff origin (`RAILS_STAFF_ORIGIN`), for example
+`{origin}/publishing/{surface}/{audience}/entries` and
+`{origin}/publishing/{surface}/{audience}/entries/{public_id}/edit`. The link is
+not gated on Edge authentication. Rails performs sign-in and authorization after
+navigation. That origin is not the Worker-to-Rails VPC transport.
+
+`org/core` `/publishing` is the authenticated operator launcher for the same
+twelve Rails management indexes. It does not implement Publishing mutations.

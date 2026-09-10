@@ -9,6 +9,7 @@ import {
   entriesIndexPath,
   entryPublicPath,
   optionalEntryBodyText,
+  parsePublicPageQuery,
   publishingErrorHtml,
   publishingErrorResponse,
   publishingHttpStatus,
@@ -59,7 +60,7 @@ describe('publishing API parsing', () => {
         status: 200,
         response: Response.json({
           data: [entry],
-          page: { next_cursor: null, has_more: false },
+          page: { current: 1, previous: null, next: null, last: 1 },
         }),
       },
       { kind: 'ok', status: 200, response: Response.json(entry) },
@@ -72,11 +73,32 @@ describe('publishing API parsing', () => {
     expect(show).toMatchObject({ kind: 'ok', value: { public_id: '01ABC' } });
     expect(entryPublicPath('ja', '01ABC')).toBe('/ja/entries/01ABC/');
     expect(entriesIndexPath('en')).toBe('/en/entries/');
-    expect(entriesIndexPath('ja', 'next/2')).toBe('/ja/entries/?cursor=next%2F2');
+    expect(entriesIndexPath('ja', 1)).toBe('/ja/entries/');
+    expect(entriesIndexPath('ja', 2)).toBe('/ja/entries/?page=2');
     expect(fetch).toHaveBeenNthCalledWith(1, '/api/v0/entries?locale=ja', {
       headers: { Accept: 'application/json' },
     });
     expect(fetch).toHaveBeenNthCalledWith(2, '/api/v0/entries/01ABC?locale=ja', {
+      headers: { Accept: 'application/json' },
+    });
+    expect(JSON.stringify(fetch.mock.calls)).not.toContain('cursor');
+  });
+
+  it('forwards locale and page=2 to Rails', async () => {
+    const { api, fetch } = client({
+      kind: 'ok',
+      status: 200,
+      response: Response.json({
+        data: [entry],
+        page: { current: 2, previous: 1, next: 3, last: 10 },
+      }),
+    });
+
+    await expect(api.fetchEntriesPage({ locale: 'en', page: 2 })).resolves.toMatchObject({
+      kind: 'ok',
+      value: { page: { current: 2, previous: 1, next: 3, last: 10 } },
+    });
+    expect(fetch).toHaveBeenCalledWith('/api/v0/entries?locale=en&page=2', {
       headers: { Accept: 'application/json' },
     });
   });
@@ -112,7 +134,7 @@ describe('publishing API parsing', () => {
       status: 200,
       response: Response.json({
         data: [{ ...entry, namespace: 'other', surface: 'other' }],
-        page: { next_cursor: null, has_more: false },
+        page: { current: 1, previous: null, next: null, last: 1 },
       }),
     });
     await expect(foreignIndex.api.fetchEntriesPage({ locale: 'ja' })).resolves.toMatchObject({
@@ -145,6 +167,8 @@ describe('publishing HTTP mapping', () => {
     [{ kind: 'not-configured' } satisfies PublishingResult<never>, 503],
     [{ kind: 'timeout' } satisfies PublishingResult<never>, 504],
     [{ kind: 'invalid-contract' } satisfies PublishingResult<never>, 502],
+    [{ kind: 'bad-request' } satisfies PublishingResult<never>, 400],
+    [{ kind: 'upstream-error', upstreamStatus: 400 } satisfies PublishingResult<never>, 400],
     [{ kind: 'internal-error' } satisfies PublishingResult<never>, 500],
   ] as const)('maps %j to HTTP %i', (result, status) => {
     expect(publishingHttpStatus(result)).toBe(status);
@@ -201,6 +225,18 @@ describe('publishing HTTP mapping', () => {
     const response = publishingErrorResponse(404, 'ja');
     expect(response.status).toBe(404);
     expect(response.headers.get('cache-control')).toBe('no-store');
+  });
+});
+
+describe('public page query', () => {
+  it('treats an omitted page as the first page and rejects malformed values', () => {
+    expect(parsePublicPageQuery(null)).toEqual({ kind: 'omitted' });
+    expect(parsePublicPageQuery('2')).toEqual({ kind: 'ok', page: 2 });
+    expect(parsePublicPageQuery('abc')).toEqual({ kind: 'invalid' });
+    expect(parsePublicPageQuery('1.2')).toEqual({ kind: 'invalid' });
+    expect(parsePublicPageQuery('-5')).toEqual({ kind: 'invalid' });
+    expect(parsePublicPageQuery('0')).toEqual({ kind: 'invalid' });
+    expect(parsePublicPageQuery('01')).toEqual({ kind: 'invalid' });
   });
 });
 
@@ -272,10 +308,19 @@ describe('publishing pages are on-demand SSR', () => {
       expect(source).not.toContain('client:load');
     }
     expect(index).toContain('entryPublicPath');
+    expect(index).toContain('parsePublicPageQuery');
+    expect(index).toContain('managementIndexUrl');
+    expect(index).not.toContain('cursor');
+    expect(index).not.toContain('has_more');
+    expect(index).not.toContain('next_cursor');
+    expect(index).not.toContain('cookieStore');
+    expect(show).toContain('managementEditUrl');
+    expect(show).toContain('entry.public_id');
+    expect(show).not.toContain('entry.slug');
     expect(jaHome).not.toContain('prerender = false');
     expect(jaHome).not.toContain('resolvePublishingApi');
-    expect(jaHome).toContain('client:load');
-    expect(jaHome).toContain('PublishedEntries');
+    expect(jaHome).not.toContain('client:');
+    expect(jaHome).not.toContain('PublishedEntries');
     expect(jaHome).toContain('/ja/entries/');
     expect(about).not.toContain('prerender = false');
     expect(about).not.toContain('resolvePublishingApi');

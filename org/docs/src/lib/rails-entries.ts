@@ -2,9 +2,6 @@ import { z } from 'astro/zod';
 
 import type { RailsClient, RailsClientResult } from './rails-client';
 
-const MAX_ALL_ENTRIES_PAGES = 100;
-const MAX_ENTRIES_PAGE_LIMIT = 100;
-
 export const railsEntrySchema = z
   .object({
     public_id: z.string().min(1),
@@ -22,13 +19,17 @@ export const railsEntrySchema = z
   })
   .loose();
 
+const pageNumberSchema = z.number().int().positive();
+
 export const railsEntriesPageSchema = z
   .object({
     data: z.array(railsEntrySchema),
     page: z
       .object({
-        next_cursor: z.string().min(1).nullable(),
-        has_more: z.boolean(),
+        current: pageNumberSchema,
+        previous: pageNumberSchema.nullable(),
+        next: pageNumberSchema.nullable(),
+        last: pageNumberSchema,
       })
       .loose(),
   })
@@ -46,8 +47,7 @@ export type RailsEntriesResult<T> =
 
 export interface FetchEntriesPageOptions {
   locale: RailsEntry['locale'];
-  limit?: number;
-  cursor?: string;
+  page?: number;
 }
 
 export interface FetchEntryOptions {
@@ -57,25 +57,16 @@ export interface FetchEntryOptions {
 
 export interface RailsEntriesClient {
   fetchEntriesPage(options: FetchEntriesPageOptions): Promise<RailsEntriesResult<RailsEntriesPage>>;
-  fetchAllEntries(
-    options: Pick<FetchEntriesPageOptions, 'locale'>,
-  ): Promise<RailsEntriesResult<RailsEntry[]>>;
   fetchEntry(options: FetchEntryOptions): Promise<RailsEntriesResult<RailsEntry>>;
 }
 
 function entriesPath(options: FetchEntriesPageOptions): string | null {
-  if (
-    options.limit !== undefined &&
-    (!Number.isInteger(options.limit) ||
-      options.limit < 1 ||
-      options.limit > MAX_ENTRIES_PAGE_LIMIT)
-  ) {
+  if (options.page !== undefined && (!Number.isInteger(options.page) || options.page < 1)) {
     return null;
   }
 
   const query = new URLSearchParams({ locale: options.locale });
-  if (options.limit !== undefined) query.set('limit', String(options.limit));
-  if (options.cursor !== undefined) query.set('cursor', options.cursor);
+  if (options.page !== undefined) query.set('page', String(options.page));
   return `/api/v0/entries?${query.toString()}`;
 }
 
@@ -128,8 +119,9 @@ async function map<T>(
 }
 
 /**
- * Rails API identity is `public_id`. The Astro public URL is intentionally
- * undecided: this client must not make an API path a page-route invariant.
+ * Rails API identity is `public_id`. The public Astro URL uses the same
+ * identity: `/{lang}/entries/{public_id}/`. Edge never calculates SQL OFFSET;
+ * page numbers are forwarded to Rails (Pagy) as `page`.
  */
 export function createRailsEntriesClient(rails: RailsClient): RailsEntriesClient {
   return {
@@ -140,28 +132,6 @@ export function createRailsEntriesClient(rails: RailsClient): RailsEntriesClient
         await rails.fetch(path, { headers: { Accept: 'application/json' } }),
         railsEntriesPageSchema,
       );
-    },
-
-    async fetchAllEntries({ locale }) {
-      const entries: RailsEntry[] = [];
-      let cursor: string | undefined;
-
-      for (let requestCount = 0; requestCount < MAX_ALL_ENTRIES_PAGES; requestCount += 1) {
-        const pageResult = await this.fetchEntriesPage(
-          cursor === undefined ? { locale } : { locale, cursor },
-        );
-        if (pageResult.kind !== 'ok') return pageResult;
-
-        entries.push(...pageResult.value.data);
-        const { has_more: hasMore, next_cursor: nextCursor } = pageResult.value.page;
-        if (!hasMore)
-          return { kind: 'ok', value: entries, upstreamStatus: pageResult.upstreamStatus };
-        if (nextCursor === null)
-          return { kind: 'invalid-contract', upstreamStatus: pageResult.upstreamStatus };
-        cursor = nextCursor;
-      }
-
-      return { kind: 'invalid-contract' };
     },
 
     async fetchEntry({ publicId, locale }) {
