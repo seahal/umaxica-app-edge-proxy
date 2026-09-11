@@ -71,7 +71,7 @@ recorded as such, with the reason and whatever was observed.
 `no-console` is an **error** in every unit. Never call `console` directly or add a new disable comment. The only two sanctioned emitters (closed, typed surfaces):
 
 - `*/apex/src/structured-logger.ts` — `@hono/structured-logger` middleware, wired in `create-apex-app.ts`
-- `*/core/src/lib/rails-dispatch-log.ts` — the Edge → Workers VPC → Rails hop
+- `*/core/src/lib/rails-dispatch-log.ts` — the Edge → Rails hop (public internet, `RAILS_ORIGIN`)
 
 Both emit one JSON line `{ level, msg, data }`, collected by `observability.logs.enabled` in each `wrangler.jsonc`. No external observability vendor; adding one is a decision, not a detail.
 

@@ -9,6 +9,7 @@ const GET = handlers.health;
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   resetEnv();
 });
 
@@ -84,7 +85,8 @@ describe('health probes', () => {
 
   it('does not probe Rails or any other downstream on liveness', async () => {
     const fetch = vi.fn(() => Promise.reject(new Error('connect ECONNREFUSED core.app.localhost')));
-    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+    setEnv({ RAILS_ORIGIN: 'https://rails.example' });
+    vi.stubGlobal('fetch', fetch);
 
     const response = await handlers.livenesses();
 
@@ -98,7 +100,8 @@ describe('health probes', () => {
 
   it('maps Rails Health API pass onto Edge 200 text/plain', async () => {
     const fetch = vi.fn(() => Promise.resolve(jsonResponse(200, PASS_DOCUMENT)));
-    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+    setEnv({ RAILS_ORIGIN: 'https://rails.example' });
+    vi.stubGlobal('fetch', fetch);
 
     const response = await GET();
 
@@ -125,7 +128,8 @@ describe('health probes', () => {
         }),
       ),
     );
-    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+    setEnv({ RAILS_ORIGIN: 'https://rails.example' });
+    vi.stubGlobal('fetch', fetch);
 
     const aggregate = await GET();
     const ready = await handlers.readinesses();
@@ -142,7 +146,8 @@ describe('health probes', () => {
 
   it('maps Rails unreachable onto Edge 503 readiness', async () => {
     const fetch = vi.fn(() => Promise.reject(new Error('connect ECONNREFUSED core.app.localhost')));
-    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+    setEnv({ RAILS_ORIGIN: 'https://rails.example' });
+    vi.stubGlobal('fetch', fetch);
 
     const response = await GET();
     expect(response.status).toBe(503);
@@ -158,7 +163,8 @@ describe('health probes', () => {
         new Response('not json', { status: 200, headers: { 'content-type': 'text/plain' } }),
       ),
     );
-    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+    setEnv({ RAILS_ORIGIN: 'https://rails.example' });
+    vi.stubGlobal('fetch', fetch);
 
     const response = await GET();
     expect(response.status).toBe(503);
@@ -169,7 +175,8 @@ describe('health probes', () => {
 describe('Edge self-health API', () => {
   it('answers pass JSON without calling Rails or fetch', async () => {
     const fetch = vi.fn(() => Promise.reject(new Error('must not hop')));
-    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+    setEnv({ RAILS_ORIGIN: 'https://rails.example' });
+    vi.stubGlobal('fetch', fetch);
 
     const response = await handlers.healthApi();
 

@@ -12,8 +12,8 @@ import { withSecurityHeaders } from './security-headers';
  * three, so it names no brand. See `adr/007-shared-fqdn-core-dispatch.md`.
  *
  * - Rails-owned paths never reach `appHandler.fetch`: dispatched directly to
- *   Rails over the Workers VPC binding, with the browser's Cookie/CSRF/auth
- *   headers preserved verbatim.
+ *   Rails at `RAILS_ORIGIN`, with the browser's Cookie/CSRF/auth headers
+ *   preserved verbatim.
  * - Blocked paths never reach Rails or the application.
  * - Everything else (the default) is application-owned: the inbound `Cookie`
  *   header is stripped before `appHandler.fetch` is ever called, and any
@@ -65,7 +65,7 @@ function isHealthPath(pathname: string): boolean {
  * endpoint an orchestrator trusts to mean "alive" must not be throttleable.
  *
  * `/health` and `/health/readinesses` are deliberately absent. Both fetch Rails
- * over the Workers VPC binding (`src/routes/health.ts`,
+ * at `RAILS_ORIGIN` (`src/routes/health.ts`,
  * `src/routes/health.readinesses.ts`), so exempting them publishes an
  * unauthenticated, uncounted path into the Rails origin — one inbound request,
  * one outbound Rails request, no ceiling. Readiness is the probe whose job is to

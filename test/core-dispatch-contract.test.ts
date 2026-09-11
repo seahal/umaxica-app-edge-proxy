@@ -172,17 +172,6 @@ describe('the three Cores stay one implementation', () => {
     expect(digests.size, 'the three dispatch modules have diverged').toBe(1);
   });
 
-  it('gives each Core its own public hostname', () => {
-    // Normalizing above would hide a copy left pointing at a sibling brand, which
-    // Workers VPC would not fail on — routing is by service_id, and the Host
-    // header only reaches Rails' Host Authorization. So it is pinned separately.
-    for (const { brand } of CORES) {
-      expect(read(`${brand}/core/src/lib/core-dispatch.ts`)).toContain(
-        `const PUBLIC_CORE_HOST = 'jp.umaxica.${brand}';`,
-      );
-    }
-  });
-
   it('keeps worker.ts byte-identical across all three', () => {
     // It names no brand precisely so this can hold: the hostname lives in
     // core-dispatch.ts, which is the file that legitimately differs.

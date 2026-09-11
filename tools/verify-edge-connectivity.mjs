@@ -224,10 +224,26 @@ export function tunnelHostFor(brand, frame, env = process.env) {
   return `${frame}-jp.umaxica.${brand}`;
 }
 
-/** The Rails origin a frame will send, read from its rails-client copy. */
+/**
+ * The Rails origin a frame will send in local development.
+ *
+ * An Astro surface names it as `PRIVATE_RAILS_ORIGIN` in its rails-client copy.
+ * A Core names it as the opt-in `RAILS_ORIGIN=` line in its `.dev.vars.example`
+ * instead — the Cores reach Rails over the public internet at a per-tier var,
+ * not over Workers VPC (ADR 018).
+ */
 export function readRailsOrigin(ws) {
   const source = readFileSync(join(repoRoot, ws, 'src/lib/rails-client.ts'), 'utf8');
-  return /PRIVATE_RAILS_ORIGIN\s*=\s*'([^']+)'/u.exec(source)?.[1] ?? null;
+  const constant = /PRIVATE_RAILS_ORIGIN\s*=\s*'([^']+)'/u.exec(source)?.[1];
+  if (constant) return constant;
+  const examplePath = join(repoRoot, ws, '.dev.vars.example');
+  if (!existsSync(examplePath)) return null;
+  return /^#?\s*RAILS_ORIGIN=(\S+)$/mu.exec(readFileSync(examplePath, 'utf8'))?.[1] ?? null;
+}
+
+/** Whether a surface reaches Rails over Workers VPC. The Cores do not (ADR 018). */
+export function isVpcSurface(surface, manifest = loadManifest()) {
+  return (manifest.railsBackedAstro ?? []).includes(surface.ws);
 }
 
 // ---------------------------------------------------------------------------
@@ -871,6 +887,16 @@ async function modeConfig(report, surfaces, manifest) {
   const railsHosts = new Map();
 
   for (const surface of surfaces) {
+    // The Cores reach Rails at `RAILS_ORIGIN` over the public internet and hold
+    // no VPC binding (ADR 018); check-workers asserts that. Only their Rails
+    // Host is checked below.
+    if (!isVpcSurface(surface, manifest)) {
+      const origin = readRailsOrigin(surface.ws);
+      if (origin) railsHosts.set(surface.key, new URL(origin).host);
+      report.record('VPC config', surface.key, SKIP, 'no Workers VPC — RAILS_ORIGIN (ADR 018)');
+      continue;
+    }
+
     const problems = [];
     const { config, error } = readWranglerConfig(join(surface.ws, 'wrangler.jsonc'));
     if (error) {
@@ -2173,13 +2199,23 @@ export async function main(argv = process.argv.slice(2)) {
         await checkToolchain(report, surfaces);
         await modeConfig(report, surfaces, manifest);
       } else if (mode === 'vpc') {
-        await modeVpc(report, surfaces, manifest, { verbose });
+        // The Cores hold no VPC binding (ADR 018), so the probe measures the rest.
+        await modeVpc(
+          report,
+          surfaces.filter((surface) => isVpcSurface(surface, manifest)),
+          manifest,
+          { verbose },
+        );
       } else if (mode === 'next') {
         await modeNext(report, surfaces);
       } else if (mode === 'preview') {
         await modePreview(report, surfaces, { withVpc: false });
       } else if (mode === 'preview:vpc') {
-        await modePreview(report, surfaces, { withVpc: true });
+        await modePreview(
+          report,
+          surfaces.filter((surface) => isVpcSurface(surface, manifest)),
+          { withVpc: true },
+        );
       } else if (mode === 'host') {
         await modeHost(report, surfaces);
       } else if (mode === 'tunnel' || mode === 'tunnel:apex') {

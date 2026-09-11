@@ -30,10 +30,14 @@ vi.mock('../src/lib/rate-limit', () => ({ checkRateLimit }));
 
 import worker from '../src/worker';
 
-function makeEnv(vpc?: { fetch: (request: Request) => Promise<Response> }): CloudflareEnv {
-  return {
-    UMAXICA_APPS_EDGE_CF_WORKERS_VPC: vpc,
-  } as unknown as CloudflareEnv;
+// Rails is reached with the runtime's global `fetch`, so a Rails stand-in is a
+// stubbed global plus a `RAILS_ORIGIN`; `afterEach` restores the real one.
+function makeEnv(rails?: { fetch: (request: Request) => Promise<Response> }): CloudflareEnv {
+  if (!rails) {
+    return {} as CloudflareEnv;
+  }
+  vi.stubGlobal('fetch', rails.fetch);
+  return { RAILS_ORIGIN: 'https://rails.example' } as unknown as CloudflareEnv;
 }
 
 const ctx = {
@@ -53,6 +57,7 @@ describe('app/core worker.ts dispatch', () => {
     checkRateLimit.mockReset();
     appFetch.mockReset();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('strips the Cookie header entirely before calling handler.fetch for an application-owned request', async () => {
@@ -391,7 +396,7 @@ describe('app/core worker.ts dispatch', () => {
    * downstream hop. These five look adjacent to it and are metered anyway,
    * which is the half of the rule a list of exemptions cannot state:
    *
-   *   /health, /health/readinesses     fetch Rails over the VPC binding
+   *   /health, /health/readinesses     fetch Rails at RAILS_ORIGIN
    *                                    (`src/routes/health.ts`,
    *                                    `src/routes/health.readinesses.ts`). An
    *                                    exemption here is an unauthenticated,
@@ -449,7 +454,7 @@ describe('app/core worker.ts dispatch', () => {
     expect(response.status).toBe(201);
   });
 
-  it('fails closed with 503 when the Rails VPC binding is absent, without falling back to the application', async () => {
+  it('fails closed with 503 when no Rails origin is configured, without falling back to the application', async () => {
     const request = new Request('https://jp.umaxica.app/api/v0/session');
 
     const response = await worker.fetch(request, makeEnv(undefined), ctx);
@@ -460,23 +465,13 @@ describe('app/core worker.ts dispatch', () => {
 
   it.each([
     [
-      'the VPC binding fetch rejects',
+      'the Rails fetch rejects',
       () => vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED 10.0.0.7:3000')),
     ],
     [
       'the request times out',
       () =>
         vi.fn().mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' })),
-    ],
-    [
-      'Workers VPC answers its ProxyError 500',
-      () =>
-        vi.fn().mockResolvedValue(
-          new Response('ProxyError: connection_refused', {
-            status: 500,
-            headers: { 'content-type': 'text/plain' },
-          }),
-        ),
     ],
   ])('answers 503 and never reaches the application when %s', async (_label, makeRailsFetch) => {
     const railsFetch = makeRailsFetch();

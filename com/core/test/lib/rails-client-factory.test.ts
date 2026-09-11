@@ -128,30 +128,6 @@ describe('com/core rails client factory', () => {
     }
   });
 
-  it('reports a Workers VPC ProxyError as unreachable, not as a Rails 500', async () => {
-    /*
-     * Measured 2026-08-09 by stopping Rails: Workers VPC does not throw when
-     * the private origin is unreachable, it returns HTTP 500 with
-     * `ProxyError: connection_refused`. Read as an http-error, a stopped Rails
-     * would be indistinguishable from a Rails that 500d in its own code.
-     */
-    const binding = makeBinding(
-      new Response('ProxyError: connection_refused', {
-        status: 500,
-        headers: { 'content-type': 'text/plain;charset=UTF-8' },
-      }),
-    );
-    const client = createRailsClient(binding, 'http://core.com.localhost:3000');
-
-    const result = await client.fetch('/api/v0/health.json');
-
-    expect(result.kind).toBe('unreachable');
-    if (result.kind === 'unreachable') {
-      // The code survives the rounding to `unreachable`.
-      expect(result.errorMessage).toContain('connection_refused');
-    }
-  });
-
   it('still reports a plain 500 from Rails as an http-error', async () => {
     const binding = makeBinding(
       new Response('boom', { status: 500, headers: { 'content-type': 'text/html' } }),

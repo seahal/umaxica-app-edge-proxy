@@ -7,7 +7,7 @@ import { renderAggregateHealth, runtimeProbes } from '../lib/runtime-health';
 /*
  * Human-readable aggregate of the three Kubernetes probes. Server route only:
  * no component, no HTML, no JSON. Rails availability is read at request time
- * over Workers VPC and mapped onto Edge's text/plain contract.
+ * from `RAILS_ORIGIN` and mapped onto Edge's text/plain contract.
  */
 export const Route = createFileRoute('/health')({
   server: {

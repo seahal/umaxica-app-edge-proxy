@@ -13,6 +13,7 @@ afterEach(() => {
   resetEnv();
   document.body.innerHTML = '';
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('com/core application shell', () => {
@@ -88,8 +89,9 @@ describe('com/core health route', () => {
     );
     setEnv({
       REVISION: { id: 'revision-id', tag: 'revision-tag', timestamp: 'built-at' },
-      UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch },
+      RAILS_ORIGIN: 'https://rails.example',
     });
+    vi.stubGlobal('fetch', fetch);
 
     const response = await handlers.health();
     expect(response.status).toBe(200);

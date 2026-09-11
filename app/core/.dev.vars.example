@@ -1,7 +1,10 @@
-# wrangler reads this file for local secrets, and `@cloudflare/vite-plugin` keeps
-# that behaviour under `vite dev`. It is committed as an EXAMPLE only — copy it
+# wrangler reads this file for local vars and secrets, and `@cloudflare/vite-plugin`
+# keeps that behaviour under `vite dev`. It is committed as an EXAMPLE only — copy it
 # to `.dev.vars`, which is gitignored.
 #
-# It is empty because this unit needs no local secret today. The two flags that
-# select the direct Rails transport are shell environment, not secrets: see
-# `.env.example`.
+# Uncomment to reach the development container's Rails. The host is not a label:
+# Rails dispatches on the Host header to `Core::App::…`. Left unset, this Core fails
+# closed — Rails-owned paths answer 503 and `/health` reports Rails as not configured,
+# which is what `pnpm test:api`, Playwright and CI expect. See
+# adr/018-core-rails-direct-internet.md.
+# RAILS_ORIGIN=http://core.app.localhost:3000

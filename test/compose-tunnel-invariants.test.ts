@@ -310,11 +310,22 @@ describe('secret hygiene', () => {
         expect(source, `${client} must strip ${header}`).toContain(`'${header}'`);
       }
 
+      const stripIndex = source.indexOf('FORBIDDEN_REQUEST_HEADERS) {');
+      expect(stripIndex, `${client} lost the header strip`).toBeGreaterThan(-1);
+
+      if (!isAstro) {
+        // The Cores reach Rails over the public internet with no transport
+        // credential at all (adr/018-core-rails-direct-internet.md), so there is
+        // nothing to apply after the strip — and nothing may be added back.
+        expect(source, `${client} must apply no transport credentials`).not.toContain(
+          'authHeaders',
+        );
+        continue;
+      }
+
       // The strip must precede the transport's own headers, otherwise a caller
       // could override the service token — or keep their own.
-      const stripIndex = source.indexOf('FORBIDDEN_REQUEST_HEADERS) {');
       const applyIndex = source.indexOf('Object.entries(authHeaders)');
-      expect(stripIndex, `${client} lost the header strip`).toBeGreaterThan(-1);
       expect(applyIndex, `${client} lost the auth application`).toBeGreaterThan(-1);
       expect(applyIndex, `${client} applies credentials before stripping`).toBeGreaterThan(
         stripIndex,

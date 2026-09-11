@@ -5,7 +5,6 @@ import { dispatchToRails } from '../../src/lib/core-dispatch';
 import {
   classifyRailsRouteClass,
   logRailsDispatch,
-  normalizeProxyErrorCode,
   normalizeRailsMethod,
   type RailsDispatchLogEntry,
 } from '../../src/lib/rails-dispatch-log';
@@ -27,6 +26,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** The one log line the last call produced, parsed. */
@@ -45,6 +45,15 @@ const BASE: RailsDispatchLogEntry = {
   outcome: 'rails_ok',
   duration_ms: 12,
 };
+
+const RAILS_HOST = 'rails.internal.example';
+const RAILS_ENV = { RAILS_ORIGIN: `https://${RAILS_HOST}` };
+
+/** Dispatches against a stubbed runtime `fetch`. */
+function dispatchWith(request: Request, fetch: unknown) {
+  vi.stubGlobal('fetch', fetch);
+  return dispatchToRails(request, RAILS_ENV, true);
+}
 
 describe('classifyRailsRouteClass', () => {
   it.each([
@@ -92,28 +101,6 @@ describe('normalizeRailsMethod', () => {
   });
 });
 
-describe('normalizeProxyErrorCode', () => {
-  it.each([
-    'connection_refused',
-    'connection_timeout',
-    'connection_read_timeout',
-    'dns_error',
-    'tls_certificate_error',
-    'rate_limited',
-    'proxy_internal_error',
-  ])('keeps the documented code %s', (code) => {
-    expect(normalizeProxyErrorCode(code)).toBe(code);
-  });
-
-  it('lower-cases a documented code', () => {
-    expect(normalizeProxyErrorCode('DNS_ERROR')).toBe('dns_error');
-  });
-
-  it.each(['something_new', 'core.org.localhost', ''])('folds %s into unknown', (code) => {
-    expect(normalizeProxyErrorCode(code)).toBe('unknown');
-  });
-});
-
 describe('logRailsDispatch shape', () => {
   it('emits one JSON line carrying the fixed envelope and the ownership marker', () => {
     logRailsDispatch(BASE);
@@ -135,30 +122,22 @@ describe('logRailsDispatch shape', () => {
   });
 
   it('omits upstream_status entirely when no response arrived', () => {
-    logRailsDispatch({ ...BASE, outcome: 'vpc_unreachable' });
+    logRailsDispatch({ ...BASE, outcome: 'upstream_unreachable' });
     expect(onlyLine().raw).not.toContain('upstream_status');
   });
 
-  it('includes upstream_status and proxy_error_code when they exist', () => {
-    logRailsDispatch({
-      ...BASE,
-      outcome: 'vpc_unreachable',
-      upstream_status: 500,
-      proxy_error_code: 'connection_refused',
-    });
+  it('includes upstream_status when a response arrived', () => {
+    logRailsDispatch({ ...BASE, outcome: 'rails_http_error', upstream_status: 500 });
 
-    expect(onlyLine().json.data).toMatchObject({
-      upstream_status: 500,
-      proxy_error_code: 'connection_refused',
-    });
+    expect(onlyLine().json.data).toMatchObject({ upstream_status: 500 });
   });
 
   it.each([
     ['rails_ok', 'info', 'log'],
     ['rails_http_error', 'warn', 'warn'],
-    ['vpc_unreachable', 'error', 'error'],
+    ['upstream_unreachable', 'error', 'error'],
     ['timeout', 'error', 'error'],
-    ['binding_not_configured', 'error', 'error'],
+    ['origin_not_configured', 'error', 'error'],
   ] as const)('reports %s at level %s on console.%s', (outcome, level, channel) => {
     logRailsDispatch({ ...BASE, outcome });
 
@@ -172,51 +151,38 @@ describe('logRailsDispatch shape', () => {
 describe('dispatchToRails logging', () => {
   const ORIGIN = 'https://jp.umaxica.org';
 
-  function envWith(fetch: unknown) {
-    return { UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } as unknown as Fetcher };
-  }
-
   it('distinguishes all five outcomes', async () => {
     const cases: [() => Promise<Response>, string][] = [
-      [
-        () => dispatchToRails(new Request(`${ORIGIN}/api/v0/x`), {}, true),
-        'binding_not_configured',
-      ],
+      [() => dispatchToRails(new Request(`${ORIGIN}/api/v0/x`), {}, true), 'origin_not_configured'],
       [
         () =>
-          dispatchToRails(
+          dispatchWith(
             new Request(`${ORIGIN}/api/v0/x`),
-            envWith(vi.fn().mockResolvedValue(new Response('ok', { status: 200 }))),
-            true,
+            vi.fn().mockResolvedValue(new Response('ok', { status: 200 })),
           ),
         'rails_ok',
       ],
       [
         () =>
-          dispatchToRails(
+          dispatchWith(
             new Request(`${ORIGIN}/api/v0/x`),
-            envWith(vi.fn().mockResolvedValue(new Response('nope', { status: 404 }))),
-            true,
+            vi.fn().mockResolvedValue(new Response('nope', { status: 404 })),
           ),
         'rails_http_error',
       ],
       [
         () =>
-          dispatchToRails(
+          dispatchWith(
             new Request(`${ORIGIN}/api/v0/x`),
-            envWith(vi.fn().mockRejectedValue(new Error('down'))),
-            true,
+            vi.fn().mockRejectedValue(new Error('down')),
           ),
-        'vpc_unreachable',
+        'upstream_unreachable',
       ],
       [
         () =>
-          dispatchToRails(
+          dispatchWith(
             new Request(`${ORIGIN}/api/v0/x`),
-            envWith(
-              vi.fn().mockRejectedValue(Object.assign(new Error('slow'), { name: 'TimeoutError' })),
-            ),
-            true,
+            vi.fn().mockRejectedValue(Object.assign(new Error('slow'), { name: 'TimeoutError' })),
           ),
         'timeout',
       ],
@@ -229,56 +195,14 @@ describe('dispatchToRails logging', () => {
     }
   });
 
-  it('reports the ProxyError 500 as vpc_unreachable with the parsed code', async () => {
-    await dispatchToRails(
-      new Request(`${ORIGIN}/oidc/callback`),
-      envWith(
-        vi.fn().mockResolvedValue(
-          new Response('ProxyError: connection_refused', {
-            status: 500,
-            headers: { 'content-type': 'text/plain' },
-          }),
-        ),
-      ),
-      true,
-    );
-
-    expect(onlyLine().json.data).toMatchObject({
-      outcome: 'vpc_unreachable',
-      route_class: 'oidc',
-      upstream_status: 500,
-      proxy_error_code: 'connection_refused',
-    });
-  });
-
-  it('folds an undocumented ProxyError code into unknown', async () => {
-    await dispatchToRails(
-      new Request(`${ORIGIN}/api/v0/x`),
-      envWith(
-        vi.fn().mockResolvedValue(
-          new Response('ProxyError: brand_new_failure', {
-            status: 500,
-            headers: { 'content-type': 'text/plain' },
-          }),
-        ),
-      ),
-      true,
-    );
-
-    expect(onlyLine().json.data.proxy_error_code).toBe('unknown');
-  });
-
   it('treats a Rails 3xx as Rails answering normally', async () => {
-    await dispatchToRails(
+    await dispatchWith(
       new Request(`${ORIGIN}/sign/out`),
-      envWith(
-        vi
-          .fn()
-          .mockResolvedValue(
-            new Response(null, { status: 302, headers: { location: `${ORIGIN}/` } }),
-          ),
-      ),
-      true,
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(null, { status: 302, headers: { location: `${ORIGIN}/` } }),
+        ),
     );
 
     expect(onlyLine().json.data).toMatchObject({ outcome: 'rails_ok', route_class: 'sign_out' });
@@ -292,10 +216,9 @@ describe('dispatchToRails logging', () => {
   });
 
   it('logs exactly once per dispatch', async () => {
-    await dispatchToRails(
+    await dispatchWith(
       new Request(`${ORIGIN}/api/v0/x`),
-      envWith(vi.fn().mockResolvedValue(new Response('ok'))),
-      true,
+      vi.fn().mockResolvedValue(new Response('ok')),
     );
     expect(emitted).toHaveLength(1);
   });
@@ -323,9 +246,8 @@ describe('dispatchToRails logging: no credentials or PII', () => {
     'SECRET_REQUEST_BODY',
     // Response body.
     'SECRET_RESPONSE_BODY',
-    // Internal hostname and the VPC service id.
-    'core.org.localhost',
-    '019f5fe0-287f-7040-9f2f-036cb5b21df7',
+    // The Rails hostname.
+    RAILS_HOST,
     // The raw pathname must never appear either.
     '/api/v0/users/user-9f2c',
   ];
@@ -333,12 +255,7 @@ describe('dispatchToRails logging: no credentials or PII', () => {
   it.each([
     [
       'a successful dispatch',
-      () =>
-        vi
-          .fn()
-          .mockResolvedValue(
-            new Response('SECRET_RESPONSE_BODY 019f5fe0-287f-7040-9f2f-036cb5b21df7'),
-          ),
+      () => vi.fn().mockResolvedValue(new Response(`SECRET_RESPONSE_BODY ${RAILS_HOST}`)),
     ],
     [
       'a Rails error',
@@ -347,21 +264,7 @@ describe('dispatchToRails logging: no credentials or PII', () => {
     [
       'a transport rejection',
       () =>
-        vi
-          .fn()
-          .mockRejectedValue(
-            new Error('connect ECONNREFUSED core.org.localhost:3000 SECRET_API_KEY'),
-          ),
-    ],
-    [
-      'a ProxyError 500',
-      () =>
-        vi.fn().mockResolvedValue(
-          new Response('ProxyError: connection_refused core.org.localhost', {
-            status: 500,
-            headers: { 'content-type': 'text/plain' },
-          }),
-        ),
+        vi.fn().mockRejectedValue(new Error(`connect ECONNREFUSED ${RAILS_HOST} SECRET_API_KEY`)),
     ],
   ])('leaks nothing on %s', async (_label, makeFetch) => {
     const request = new Request(
@@ -369,13 +272,7 @@ describe('dispatchToRails logging: no credentials or PII', () => {
       { method: 'POST', headers: SECRETS, body: 'SECRET_REQUEST_BODY' },
     );
 
-    await dispatchToRails(
-      request,
-      {
-        UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch: makeFetch() } as unknown as Fetcher,
-      },
-      true,
-    );
+    await dispatchWith(request, makeFetch());
 
     const allOutput = emitted.map((entry) => entry.line).join('\n');
     expect(allOutput).not.toBe('');
@@ -384,15 +281,10 @@ describe('dispatchToRails logging: no credentials or PII', () => {
     }
   });
 
-  it('emits only the eight permitted keys', async () => {
-    await dispatchToRails(
+  it('emits only the seven permitted keys', async () => {
+    await dispatchWith(
       new Request(`${ORIGIN}/api/v0/x`, { headers: SECRETS }),
-      {
-        UMAXICA_APPS_EDGE_CF_WORKERS_VPC: {
-          fetch: vi.fn().mockResolvedValue(new Response('ok')),
-        } as unknown as Fetcher,
-      },
-      true,
+      vi.fn().mockResolvedValue(new Response('ok')),
     );
 
     const { json } = onlyLine();

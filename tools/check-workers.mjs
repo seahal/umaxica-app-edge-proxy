@@ -509,13 +509,20 @@ for (const ws of manifest.railsBacked) {
 for (const ws of manifest.railsBackedVite ?? []) {
   const config = loadWrangler(ws);
   if (!config) continue;
-  // `local` is the extra tier: vite dev runs the Worker in workerd, so the
-  // everyday loop needs an environment that declares no VPC Service.
-  checkEnvironments(ws, config, ['local', 'development', 'vpc', 'test']);
+  // `local` is the extra tier: vite dev runs the Worker in workerd, and it is
+  // the tier whose `RAILS_ORIGIN` points at the development container's Rails.
+  checkEnvironments(ws, config, ['local', 'development', 'test']);
   checkViteWorker(ws, config);
   checkPublicAssets(ws);
 
-  checkVpcPolicy(ws, config);
+  // The Cores reach Rails over the public internet at `RAILS_ORIGIN`, not over
+  // Workers VPC — adr/018-core-rails-direct-internet.md.
+  if (vpcBindings(config).length > 0) {
+    fail(
+      ws,
+      'railsBackedVite workers must not declare vpc_services — they reach Rails at RAILS_ORIGIN',
+    );
+  }
 }
 
 for (const ws of manifest.railsBackedAstro ?? []) {
