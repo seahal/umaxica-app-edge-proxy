@@ -347,43 +347,6 @@ function checkViteWorker(ws, config) {
   }
 }
 
-// Astro SSG counterpart of checkViteWorker. Same VPC / NODE_ENV / no-directory
-// rules; different HTML asset routing because Astro emits `/ja/index.html` and
-// Cloudflare must map `/ja/` onto it. `html_handling: "none"` 404'd those
-// directory URLs with an empty body (measured 2026-09-02).
-function checkAstroWorker(ws, config) {
-  if (config.vars?.NODE_ENV !== 'production') {
-    fail(ws, 'top-level vars must set NODE_ENV to production');
-  }
-  if (!config.compatibility_flags?.includes('nodejs_compat')) {
-    fail(ws, 'compatibility_flags must include nodejs_compat');
-  }
-  if (config.assets?.directory !== undefined) {
-    fail(
-      ws,
-      'assets.directory must not be set — the adapter writes it into the output wrangler.json',
-    );
-  }
-  if (config.assets?.html_handling !== 'auto-trailing-slash') {
-    fail(ws, 'assets.html_handling must be "auto-trailing-slash" for directory-style Astro HTML');
-  }
-  if (config.assets?.not_found_handling !== '404-page') {
-    fail(ws, 'assets.not_found_handling must be "404-page" so 404.html is served');
-  }
-  if (config.assets?.binding !== undefined) {
-    fail(ws, 'assets binding must not be declared in the input config — the adapter adds it');
-  }
-  if (config.images !== undefined) {
-    fail(ws, 'images binding must not be declared — nothing reads it');
-  }
-  if ((config.services ?? []).some((s) => s.binding === 'WORKER_SELF_REFERENCE')) {
-    fail(ws, 'WORKER_SELF_REFERENCE is an OpenNext requirement and must not be declared');
-  }
-  if (config.main?.includes('.open-next')) {
-    fail(ws, 'main must not point into .open-next');
-  }
-}
-
 // Static assets are the one thing that ships without any gate noticing it is
 // gone. A missing .ts breaks typecheck; a missing route breaks a test. A missing
 // public/ file breaks nothing until a browser 404s in production — and `wrangler
@@ -525,11 +488,14 @@ for (const ws of manifest.railsBackedVite ?? []) {
   }
 }
 
-for (const ws of manifest.railsBackedAstro ?? []) {
+// The twelve public content cells: the same Vite + TanStack Start Worker shape as
+// the Cores (checkViteWorker), but Rails is reached over the Workers VPC binding,
+// so they carry the VPC policy and a `vpc` tier. adr/019.
+for (const ws of manifest.railsBackedVpcVite ?? []) {
   const config = loadWrangler(ws);
   if (!config) continue;
   checkEnvironments(ws, config, ['local', 'development', 'vpc', 'test']);
-  checkAstroWorker(ws, config);
+  checkViteWorker(ws, config);
   checkPublicAssets(ws);
 
   checkVpcPolicy(ws, config);
@@ -543,7 +509,7 @@ for (const ws of manifest.railsBackedAstro ?? []) {
 for (const ws of [
   ...manifest.railsBacked,
   ...(manifest.railsBackedVite ?? []),
-  ...(manifest.railsBackedAstro ?? []),
+  ...(manifest.railsBackedVpcVite ?? []),
   ...manifest.contentSurface,
 ]) {
   const pkgPath = join(root, ws, 'package.json');
@@ -668,7 +634,7 @@ for (const ws of manifest.standalone) {
   for (const ws of [
     ...manifest.railsBacked,
     ...(manifest.railsBackedVite ?? []),
-    ...(manifest.railsBackedAstro ?? []),
+    ...(manifest.railsBackedVpcVite ?? []),
     ...manifest.contentSurface,
     ...manifest.standalone,
   ]) {
@@ -705,7 +671,7 @@ if (failures.length > 0) {
 const checked =
   manifest.railsBacked.length +
   (manifest.railsBackedVite ?? []).length +
-  (manifest.railsBackedAstro ?? []).length +
+  (manifest.railsBackedVpcVite ?? []).length +
   manifest.contentSurface.length +
   manifest.standalone.length;
 process.stdout.write(`check-workers: OK (${checked} workers validated)\n`);

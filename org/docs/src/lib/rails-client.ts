@@ -1,30 +1,24 @@
+import '@tanstack/react-start/server-only';
 import { readBoundedText } from './bounded-text';
 import type { EdgeBindings } from './env';
+import { PRIVATE_RAILS_ORIGIN } from './publishing-cell';
 
 /*
- * Ported verbatim from `src/lib/rails-client.ts` (TanStack Start unit). Two
- * deliberate differences and nothing else:
+ * The private Worker → Rails transport for this public content unit.
  *
- * 1. No Start/Next server-only marker — Astro decides server vs
- *    client by file location (`src/pages/*.ts` endpoints are server-only)
- *    and by `export const prerender = false`.
- * 2. `getRailsClient()` takes the Cloudflare `env` as an argument instead of
- *    reading a module-global `cloudflare:workers`. Astro exposes bindings
- *    per-request on `context.locals.runtime.env`, so the transport selection
- *    moves to the call site (`src/pages/health.ts`).
+ * Server-only: `@tanstack/react-start/server-only` makes the build fail if a
+ * client bundle ever reaches this module, so the private origin and the VPC
+ * binding cannot leak into the browser.
  *
- * Everything the invariant suite pins — the credential strip, the relative-path
- * validation, `redirect: 'manual'`, `cache: 'no-store'`, the 5s timeout, the
- * `ProxyError` → `unreachable` classification — is unchanged.
+ * Everything the invariant suite pins is here: the credential strip, the
+ * relative-path validation, `redirect: 'manual'` (a Rails redirect is an
+ * upstream error, never followed), `cache: 'no-store'`, the 5 s timeout, and
+ * the `ProxyError` → `unreachable` classification.
+ *
+ * The origin is this cell's `PRIVATE_RAILS_ORIGIN` (`src/lib/publishing-cell.ts`).
  */
 
 const RAILS_FETCH_TIMEOUT_MS = 5000;
-
-// The Rails entry point for this frame. Workers VPC does NOT route on this host;
-// the VPC Service decides where the connection goes and this URL only populates
-// the `Host` header, which Rails dispatches on to `<Frame>::<Brand>::…`. Editing
-// it changes which Rails namespace answers.
-const PRIVATE_RAILS_ORIGIN = 'http://docs.org.localhost:3000';
 
 // Stripped from every outbound request, always. Never relay a caller's
 // credentials to Rails — a browser session cookie or an inbound Access token
@@ -45,6 +39,7 @@ export type RailsClientInit = Pick<RequestInit, 'method' | 'headers' | 'body'>;
 export type RailsClientResult =
   | { kind: 'ok'; status: number; response: Response }
   | { kind: 'http-error'; status: number; response: Response }
+  | { kind: 'timeout' }
   | { kind: 'unreachable'; errorMessage: string }
   | { kind: 'invalid-path'; reason: string };
 
@@ -120,25 +115,15 @@ async function readProxyError(response: Response): Promise<string | null> {
   }
 }
 
-function buildSanitizedHeaders(
-  init: RailsClientInit | undefined,
-  authHeaders: Readonly<Record<string, string>>,
-): Headers {
+function buildSanitizedHeaders(init: RailsClientInit | undefined): Headers {
   const headers = new Headers(init?.headers);
   for (const forbidden of FORBIDDEN_REQUEST_HEADERS) {
     headers.delete(forbidden);
   }
-  for (const [name, value] of Object.entries(authHeaders)) {
-    headers.set(name, value);
-  }
   return headers;
 }
 
-export function createRailsClient(
-  fetcher: RailsFetcher,
-  origin: string,
-  authHeaders: Readonly<Record<string, string>> = {},
-): RailsClient {
+export function createRailsClient(fetcher: RailsFetcher, origin: string): RailsClient {
   return {
     async fetch(path, init) {
       const validationError = validateRelativePath(path);
@@ -155,7 +140,7 @@ export function createRailsClient(
         const response = await fetcher.fetch(url.toString(), {
           ...(init?.method === undefined ? {} : { method: init.method }),
           ...(init?.body === undefined ? {} : { body: init.body }),
-          headers: buildSanitizedHeaders(init, authHeaders),
+          headers: buildSanitizedHeaders(init),
           redirect: 'manual',
           cache: 'no-store',
           signal: AbortSignal.timeout(RAILS_FETCH_TIMEOUT_MS),
@@ -171,6 +156,9 @@ export function createRailsClient(
 
         return { kind: 'ok', status: response.status, response };
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          return { kind: 'timeout' };
+        }
         return { kind: 'unreachable', errorMessage: getErrorMessage(error) };
       }
     },
@@ -180,9 +168,10 @@ export function createRailsClient(
 /**
  * Two mutually exclusive transports, selected by an actual runtime capability:
  *
- * 1. Local Node dev  → direct private network, no Access token.
- * 2. VPC binding     → workerd. Cloudflare grants the real binding.
- * 3. Neither         → null, reported as `not-configured`. Fail closed.
+ * 1. Local dev (`EDGE_LOCAL_NODE_RUNTIME=1` and `EDGE_LOCAL_RAILS_ENABLED=1`)
+ *    → direct private network, no Access token.
+ * 2. VPC binding → workerd. Cloudflare grants the real binding.
+ * 3. Neither → null, reported as `not-configured`. Fail closed.
  *
  * The local check runs first — a Workers VPC binding has no local simulator and
  * is truthy-but-throwing without `remote: true`, so testing it first would make

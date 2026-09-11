@@ -1,54 +1,38 @@
+import { isPublishingAudience, isPublishingSurface, type PublishingCell } from './publishing-model';
 import { parseRailsStaffOrigin } from './rails-staff-origin';
 
-export const PUBLISHING_SURFACES = ['info', 'docs', 'news', 'help'] as const;
-export const PUBLISHING_AUDIENCES = ['app', 'com', 'org'] as const;
+/*
+ * Links from a public page into the Rails Publishing CMS.
+ *
+ * They are ALWAYS rendered. This unit is anonymous: it never reads a session,
+ * never asks Rails who the visitor is, and so never decides whether to show a
+ * management link. Rails is the authentication and authorization boundary —
+ * following the link as a signed-in editor opens the CMS, as a stranger the
+ * sign-in page, as an unauthorized account a denial.
+ *
+ * The origin is the browser-facing Rails staff origin (`RAILS_STAFF_BASE_ORIGIN`),
+ * never the private Worker → Rails hop; `parseRailsStaffOrigin` refuses the
+ * latter. Member identity is `public_id`, never a database id or slug.
+ */
 
-export type PublishingSurface = (typeof PUBLISHING_SURFACES)[number];
-export type PublishingAudience = (typeof PUBLISHING_AUDIENCES)[number];
-
-function isPublishingSurface(value: string): value is PublishingSurface {
-  return (PUBLISHING_SURFACES as readonly string[]).includes(value);
-}
-
-function isPublishingAudience(value: string): value is PublishingAudience {
-  return (PUBLISHING_AUDIENCES as readonly string[]).includes(value);
-}
-
-function requireCell(
-  surface: string,
-  audience: string,
-): {
-  surface: PublishingSurface;
-  audience: PublishingAudience;
-} {
-  if (!isPublishingSurface(surface) || !isPublishingAudience(audience)) {
+function requireCell(cell: PublishingCell): PublishingCell {
+  if (!isPublishingSurface(cell.surface) || !isPublishingAudience(cell.audience)) {
     throw new Error('unknown publishing cell');
   }
-  return { surface, audience };
+  return cell;
 }
 
-/**
- * Rails management index for one publishing cell.
- * Member identity is `public_id`, never a database id or slug.
- */
-export function managementIndexUrl(
-  origin: string,
-  surface: PublishingSurface,
-  audience: PublishingAudience,
-): string {
-  const cell = requireCell(surface, audience);
-  return `${parseRailsStaffOrigin(origin)}/publishing/${cell.surface}/${cell.audience}/entries`;
+/** `/publishing/{surface}/{audience}/entries` on the Rails staff origin. */
+export function managementIndexUrl(origin: string, cell: PublishingCell): string {
+  const { surface, audience } = requireCell(cell);
+  return `${parseRailsStaffOrigin(origin)}/publishing/${surface}/${audience}/entries`;
 }
 
-export function managementEditUrl(
-  origin: string,
-  surface: PublishingSurface,
-  audience: PublishingAudience,
-  publicId: string,
-): string {
-  const cell = requireCell(surface, audience);
+/** `/publishing/{surface}/{audience}/entries/{public_id}/edit` on the Rails staff origin. */
+export function managementEditUrl(origin: string, cell: PublishingCell, publicId: string): string {
+  const { surface, audience } = requireCell(cell);
   if (publicId.length === 0) {
     throw new Error('public_id is required');
   }
-  return `${parseRailsStaffOrigin(origin)}/publishing/${cell.surface}/${cell.audience}/entries/${encodeURIComponent(publicId)}/edit`;
+  return `${parseRailsStaffOrigin(origin)}/publishing/${surface}/${audience}/entries/${encodeURIComponent(publicId)}/edit`;
 }

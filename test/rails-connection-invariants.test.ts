@@ -3,7 +3,7 @@
  *
  * Two transports, one per bundler family:
  *
- * - The twelve Astro content surfaces reach Rails over one Cloudflare Workers VPC
+ * - The twelve TanStack Start public content cells reach Rails over one Cloudflare Workers VPC
  *   binding (`adr/005-rails-edge-workers-vpc-connection.md`, amended by
  *   `adr/006-development-workers-vpc-transport.md`), declared per tier that
  *   needs it — the top level (which IS production), `env.development` and
@@ -59,21 +59,21 @@ function isNextFrame(workspace: string): boolean {
   return existsSync(join(repoRoot, workspace, 'next.config.ts'));
 }
 
-function isAstroFrame(workspace: string): boolean {
-  return existsSync(join(repoRoot, workspace, 'astro.config.mjs'));
+/** The twelve public content cells: TanStack Start, Rails over Workers VPC. */
+function isVpcCell(workspace: string): boolean {
+  return ['docs', 'help', 'info', 'news'].includes(workspace.split('/')[1] ?? '');
 }
 
 /** Where this frame answers `/health`, per bundler. */
 function healthRouteOf(workspace: string): string {
   if (isNextFrame(workspace)) return `${workspace}/src/app/health/route.ts`;
-  if (isAstroFrame(workspace)) return `${workspace}/src/pages/health.ts`;
   return `${workspace}/src/routes/health.ts`;
 }
 
 const NEXT_FRAMES = RAILS_FRAMES.filter(({ workspace }) => isNextFrame(workspace));
-const ASTRO_FRAMES = RAILS_FRAMES.filter(({ workspace }) => isAstroFrame(workspace));
+const VPC_CELLS = RAILS_FRAMES.filter(({ workspace }) => isVpcCell(workspace));
 const VITE_FRAMES = RAILS_FRAMES.filter(
-  ({ workspace }) => !isNextFrame(workspace) && !isAstroFrame(workspace),
+  ({ workspace }) => !isNextFrame(workspace) && !isVpcCell(workspace),
 );
 
 /**
@@ -164,8 +164,8 @@ describe('rails client layout', () => {
    * The failure mode it exists to catch is drift between owned copies: one
    * edited, the rest left behind, with nothing at runtime noticing.
    */
-  it('keeps Astro /health on the Rails Health API consumer, not a JSON proxy', () => {
-    for (const { workspace } of ASTRO_FRAMES) {
+  it('keeps public content cell /health on the Rails Health API consumer, not a JSON proxy', () => {
+    for (const { workspace } of VPC_CELLS) {
       const source = code(healthRouteOf(workspace));
       expect(source, `${workspace} must consume rails-health`).toContain('checkRailsHealth');
       expect(source, `${workspace} must not proxy Rails JSON`).not.toContain('Response.json');
@@ -191,7 +191,7 @@ describe('rails client layout', () => {
     expect(new Set(VITE_FRAMES.map(({ workspace }) => read(healthRouteOf(workspace)))).size).toBe(
       1,
     );
-    expect(new Set(ASTRO_FRAMES.map(({ workspace }) => read(healthRouteOf(workspace)))).size).toBe(
+    expect(new Set(VPC_CELLS.map(({ workspace }) => read(healthRouteOf(workspace)))).size).toBe(
       1,
     );
   });
@@ -203,7 +203,7 @@ describe('rails client layout', () => {
    */
   it('places every frame in exactly one bundler family', () => {
     expect(
-      [...NEXT_FRAMES, ...VITE_FRAMES, ...ASTRO_FRAMES].map(({ workspace }) => workspace).sort(),
+      [...NEXT_FRAMES, ...VITE_FRAMES, ...VPC_CELLS].map(({ workspace }) => workspace).sort(),
     ).toEqual(RAILS_FRAMES.map(({ workspace }) => workspace).sort());
   });
 
@@ -261,7 +261,7 @@ describe('rails client layout', () => {
     }
   });
 
-  it.each(ASTRO_FRAMES)('$workspace sends its own Rails host', ({ brand, frame, workspace }) => {
+  it.each(VPC_CELLS)('$workspace sends its own Rails host', ({ brand, frame, workspace }) => {
     /*
      * Each frame addresses its own Rails entry point, and the host is how.
      *
@@ -276,7 +276,7 @@ describe('rails client layout', () => {
      * than left to review.
      */
     const origin = readConstant(
-      read(`${workspace}/src/lib/rails-client.ts`),
+      read(`${workspace}/src/lib/publishing-cell.ts`),
       'PRIVATE_RAILS_ORIGIN',
     );
     expect(origin, `${workspace} must address ${frame}.${brand}`).toBe(
@@ -314,7 +314,7 @@ describe('rails client layout', () => {
   });
 
   it('requires both the private-network overlay and the local Node marker', () => {
-    for (const { workspace } of ASTRO_FRAMES) {
+    for (const { workspace } of VPC_CELLS) {
       const source = read(`${workspace}/src/lib/rails-client.ts`);
       const pkg = JSON.parse(read(`${workspace}/package.json`)) as {
         scripts?: { dev?: string };
@@ -447,7 +447,7 @@ describe('apex workers stay independent of Rails', () => {
 
 describe('workers vpc bindings', () => {
   /*
-   * Where the binding may live on the twelve Astro surfaces, asserted from the
+   * Where the binding may live on the twelve public content cells, asserted from the
    * parsed config rather than from where a string happens to sit in the file.
    *
    * wrangler does NOT inherit bindings into `env` blocks, so every tier that
@@ -481,7 +481,7 @@ describe('workers vpc bindings', () => {
     return entries.filter((entry) => entry.binding === VPC_BINDING);
   };
 
-  it.each(ASTRO_FRAMES)(
+  it.each(VPC_CELLS)(
     '$workspace binds production to the bootstrap VPC service, without remote',
     ({ workspace }) => {
       /*
@@ -502,7 +502,7 @@ describe('workers vpc bindings', () => {
     },
   );
 
-  it.each(ASTRO_FRAMES)(
+  it.each(VPC_CELLS)(
     '$workspace keeps env.vpc on the remote development binding',
     ({ workspace }) => {
       const declared = bindingsAt(workspace, 'vpc');
@@ -512,7 +512,7 @@ describe('workers vpc bindings', () => {
     },
   );
 
-  it.each(ASTRO_FRAMES)(
+  it.each(VPC_CELLS)(
     '$workspace gives env.development the remote binding too',
     ({ workspace }) => {
       /*
@@ -535,7 +535,7 @@ describe('workers vpc bindings', () => {
     },
   );
 
-  it.each(ASTRO_FRAMES)(
+  it.each(VPC_CELLS)(
     '$workspace keeps the Node transport independent of the binding',
     ({ workspace }) => {
       /*
@@ -565,7 +565,7 @@ describe('workers vpc bindings', () => {
     expect(Object.keys(config?.env ?? {})).not.toContain('production');
   });
 
-  it('points every Astro surface at the same service per tier', () => {
+  it('points every public content cell at the same service per tier', () => {
     /*
      * One development Rails, so one VPC service shared by all twelve surfaces.
      * Written as an assertion so a divergence — a surface left on an old service
@@ -573,7 +573,7 @@ describe('workers vpc bindings', () => {
      */
     for (const tier of ['top', 'vpc'] as const) {
       const ids = new Set(
-        ASTRO_FRAMES.map(({ workspace }) => bindingsAt(workspace, tier)[0]?.service_id),
+        VPC_CELLS.map(({ workspace }) => bindingsAt(workspace, tier)[0]?.service_id),
       );
       expect(ids.size, `the twelve ${tier} service_ids have diverged`).toBe(1);
     }
@@ -599,7 +599,7 @@ describe('workers vpc bindings', () => {
 
     // Post-cutover: production has left the development tunnel, and no surface
     // may be left behind on it.
-    for (const { workspace } of ASTRO_FRAMES) {
+    for (const { workspace } of VPC_CELLS) {
       expect(
         bindingsAt(workspace, 'top')[0]?.service_id,
         `${workspace} was left on the development VPC service after the AWS cutover`,
@@ -620,7 +620,7 @@ describe('vpc probe', () => {
      * apart silently: the probe would answer 200 for hosts the surfaces never
      * address, and the acceptance run would call the transport proven.
      *
-     * Reconstructed here from the twelve Astro surfaces rather than repeated, so
+     * Reconstructed here from the twelve public content cells rather than repeated, so
      * the expectation cannot be updated by editing this file alone. The Cores
      * are absent on purpose: they do not use Workers VPC (ADR 018).
      */
@@ -628,9 +628,9 @@ describe('vpc probe', () => {
       ...read('tools/vpc-probe/probe.mjs').matchAll(/\{ key: '([^']+)', url: '([^']+)' \}/gu),
     ].map(([, key, url]) => ({ key, url }));
 
-    const expected = ASTRO_FRAMES.map(({ brand, frame, workspace }) => {
+    const expected = VPC_CELLS.map(({ brand, frame, workspace }) => {
       const origin = readConstant(
-        read(`${workspace}/src/lib/rails-client.ts`),
+        read(`${workspace}/src/lib/publishing-cell.ts`),
         'PRIVATE_RAILS_ORIGIN',
       );
       const path = readConstant(

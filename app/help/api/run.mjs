@@ -18,9 +18,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const PORT = 5408;
 const READY_PATH = '/health';
-// An unmatched path every unit's Hurl suite hits. Astro's first compile of
-// `404.astro` can answer 500 while `/health` is already 200; waiting on this
-// path means the suite starts after that compile, not during it.
+// An unmatched path every unit's Hurl suite hits. A dev server's first compile
+// of the not-found document can answer 500 while `/health` is already 200;
+// waiting on this path means the suite starts after that compile, not during it.
 const WARM_PATH = '/__definitely_not_found__';
 
 // Set EDGE_API_BASE to run the same files against a preview deployment. Nothing
@@ -120,8 +120,9 @@ function runHurl() {
     // declare.
     //
     // `--jobs 1` turns off Hurl's default `--test` parallelism. Parallel files
-    // all hit `WARM_PATH` at once and race Astro's first compile of 404.astro,
-    // which answers 500 instead of 404. Playwright already uses `workers: 1`.
+    // all hit `WARM_PATH` at once and race the dev server's first compile of the
+    // not-found document, which answers 500 instead of 404. Playwright already
+    // uses `workers: 1`.
     const hurl = spawn('hurl', ['--test', '--jobs', '1', '--variable', `base=${BASE}`, 'api'], {
       cwd: unitDir,
       stdio: 'inherit',

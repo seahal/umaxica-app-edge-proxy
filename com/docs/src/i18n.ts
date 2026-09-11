@@ -1,20 +1,23 @@
 /*
- * This unit's language machinery and shell vocabulary — byte-identical across
- * all twelve frames (like `src/i18n/config.ts` was, only wider).
+ * This unit's language machinery and every UI string it renders —
+ * byte-identical across all twelve public content units.
  *
- * The TanStack unit carried `export const defaultLocale = 'ja'` and every UI
- * string as an inline Japanese literal. The Astro build adds `en` as a real
- * second locale (plan: "Astro 移行と同時に実装"). Page copy that varies by frame
- * (info / news / docs / help) stays in the route components, exactly as it did
- * in `routes/index.tsx` and `routes/about.tsx`; this file holds only what every
- * frame shares. `<html lang>` always agrees with the routed locale.
+ * Two locales, both carried in the URL as a mandatory first segment (`/ja/…`,
+ * `/en/…`). The URL locale is the ONLY locale source for a rendered page: it
+ * drives `<html lang>`, these strings, the Rails `locale=` parameter, canonical
+ * and hreflang, and every link the page emits. `Accept-Language` is read in one
+ * place only — the bare `/`, which has no locale yet and redirects to one.
  *
- * Region (jp/us) is orthogonal and lives in `lib/canonical.ts` — a build-time
- * origin choice, not a translation.
+ * A two-language dictionary does not need an i18n framework. It needs one typed
+ * object per language, checked by the compiler for missing keys, and that is
+ * all this is. Copy that varies by surface (docs / help / info / news) lives in
+ * `src/lib/site-copy.ts`; this file holds what every surface shares.
  */
 
 export const LOCALES = ['ja', 'en'] as const;
 export type Locale = (typeof LOCALES)[number];
+
+/** The locale `x-default` points at and the locale-less documents speak. */
 export const DEFAULT_LOCALE: Locale = 'ja';
 
 export function isLocale(value: string | undefined): value is Locale {
@@ -22,7 +25,7 @@ export function isLocale(value: string | undefined): value is Locale {
 }
 
 /**
- * Negotiate a locale from an `Accept-Language` header. No default is assumed; a
+ * Negotiate a locale from an `Accept-Language` header, for the bare `/` only. A
  * request that expresses no preference for either supported language falls back
  * to `DEFAULT_LOCALE`.
  */
@@ -44,83 +47,115 @@ export function negotiateLocale(acceptLanguage: string | null): Locale {
   return DEFAULT_LOCALE;
 }
 
-interface ShellStrings {
-  htmlDir: 'ltr';
+export interface UiStrings {
   skipToMain: string;
   brand: string;
+  primaryNavLabel: string;
   utilityNavLabel: string;
-  aboutLink: string;
-  offline: { title: string; heading: string; body: string; reload: string };
-  serverError: {
-    title: string;
-    heading: string;
-    body: string;
-    statusPage: string;
-    status: string;
-  };
-  notFound: { title: string; heading: string; status: string; backHome: string };
+  home: string;
+  entries: string;
+  search: string;
+  about: string;
+  viewEntries: string;
+  entriesTitle: string;
+  entriesHeading: string;
+  entriesDescription: string;
+  entriesEmpty: string;
+  entriesPageTitle: (page: number) => string;
+  previous: string;
+  next: string;
+  pagination: string;
+  manage: string;
+  edit: string;
+  publishedAt: string;
+  entryBodyStructured: string;
+  searchTitle: string;
+  searchHeading: string;
+  searchDescription: string;
+  searchLabel: string;
+  searchSubmit: string;
+  searchPrompt: string;
+  searchNoResults: (query: string) => string;
+  searchResultCount: (count: number, query: string) => string;
+  searchTemporaryNotice: string;
+  unavailableTitle: string;
+  unavailableHeading: string;
+  unavailableBody: string;
 }
 
-export const SHELL: Record<Locale, ShellStrings> = {
+export const UI: Record<Locale, UiStrings> = {
   ja: {
-    htmlDir: 'ltr',
     skipToMain: '本文へスキップ',
     brand: 'UMAXICA',
+    primaryNavLabel: 'メインナビゲーション',
     utilityNavLabel: 'ユーティリティナビゲーション',
-    aboutLink: 'このサイトについて',
-    offline: {
-      title: 'オフライン',
-      heading: 'オフラインです',
-      body: 'ネットワーク接続を確認して再読み込みしてください。',
-      reload: '再読み込み',
-    },
-    serverError: {
-      title: 'サーバーエラー',
-      heading: 'サーバーエラーです',
-      body: '一時的にページを表示できません。稼働状況はステータスページで確認できます。',
-      statusPage: '稼働状況を見る',
-      status: 'HTTP 500',
-    },
-    notFound: {
-      title: 'ページが見つかりません',
-      heading: 'ページが見つかりません',
-      status: 'HTTP 404',
-      backHome: 'トップへ戻る',
-    },
+    home: 'ホーム',
+    entries: 'エントリー',
+    search: '検索',
+    about: 'このサイトについて',
+    viewEntries: '公開エントリーを見る',
+    entriesTitle: 'エントリー',
+    entriesHeading: '公開エントリー',
+    entriesDescription: '公開されているエントリーの一覧です。',
+    entriesEmpty: '公開エントリーはまだありません。',
+    entriesPageTitle: (page) => `エントリー（${String(page)} ページ目）`,
+    previous: '前のページ',
+    next: '次のページ',
+    pagination: 'ページ送り',
+    manage: '管理',
+    edit: '編集',
+    publishedAt: '公開日時',
+    entryBodyStructured:
+      '本文は構造化オブジェクトとして保持されています。公開レンダラーは body の固定スキーマを仮定しません。',
+    searchTitle: '検索',
+    searchHeading: 'エントリーを検索',
+    searchDescription: 'このサイトの公開エントリーを検索します。',
+    searchLabel: '検索キーワード',
+    searchSubmit: '検索する',
+    searchPrompt: 'キーワードを入力して検索してください。',
+    searchNoResults: (query) => `「${query}」に一致するエントリーは見つかりませんでした。`,
+    searchResultCount: (count, query) => `「${query}」の検索結果: ${String(count)} 件`,
+    searchTemporaryNotice:
+      '検索は現在、仮のサンプルデータで動作しています。結果は公開エントリーの一覧と一致しない場合があります。',
+    unavailableTitle: 'このページを表示できません',
+    unavailableHeading: 'このページを表示できません',
+    unavailableBody: '一時的にページを表示できません。時間をおいて再度お試しください。',
   },
   en: {
-    htmlDir: 'ltr',
     skipToMain: 'Skip to main content',
     brand: 'UMAXICA',
+    primaryNavLabel: 'Main navigation',
     utilityNavLabel: 'Utility navigation',
-    aboutLink: 'About this site',
-    offline: {
-      title: 'Offline',
-      heading: 'You are offline',
-      body: 'Check your network connection and reload the page.',
-      reload: 'Reload',
-    },
-    serverError: {
-      title: 'Server error',
-      heading: 'Server error',
-      body: 'This page cannot be shown right now. Check the status page for updates.',
-      statusPage: 'View system status',
-      status: 'HTTP 500',
-    },
-    notFound: {
-      title: 'Page not found',
-      heading: 'Page not found',
-      status: 'HTTP 404',
-      backHome: 'Back to top',
-    },
+    home: 'Home',
+    entries: 'Entries',
+    search: 'Search',
+    about: 'About this site',
+    viewEntries: 'View published entries',
+    entriesTitle: 'Entries',
+    entriesHeading: 'Published entries',
+    entriesDescription: 'A list of published entries.',
+    entriesEmpty: 'No published entries yet.',
+    entriesPageTitle: (page) => `Entries (page ${String(page)})`,
+    previous: 'Previous',
+    next: 'Next',
+    pagination: 'Pagination',
+    manage: 'Manage',
+    edit: 'Edit',
+    publishedAt: 'Published',
+    entryBodyStructured:
+      'The body is a structured object. The public renderer does not assume a frozen body schema.',
+    searchTitle: 'Search',
+    searchHeading: 'Search entries',
+    searchDescription: 'Search the published entries on this site.',
+    searchLabel: 'Search terms',
+    searchSubmit: 'Search',
+    searchPrompt: 'Enter a keyword to search.',
+    searchNoResults: (query) => `No entries matched “${query}”.`,
+    searchResultCount: (count, query) => `${String(count)} results for “${query}”`,
+    searchTemporaryNotice:
+      'Search currently runs on temporary sample data. Results may not match the published entry list.',
+    unavailableTitle: 'Unable to display this page',
+    unavailableHeading: 'Unable to display this page',
+    unavailableBody: 'This page cannot be shown right now. Please try again later.',
   },
 };
-
-/** Page copy that varies by frame. Each route component supplies one of these. */
-export interface PageCopy {
-  siteName: string;
-  title: string;
-  heading: string;
-  description: string;
-  paragraphs: string[];
-}

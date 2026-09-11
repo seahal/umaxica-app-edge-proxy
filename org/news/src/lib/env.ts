@@ -1,17 +1,22 @@
+import '@tanstack/react-start/server-only';
 import { env } from 'cloudflare:workers';
 
 /*
- * The Cloudflare bindings this Astro build reads, and the one place their shape
- * is named. Ported from `src/lib/cloudflare-env.ts`.
+ * The Cloudflare bindings this unit reads, and the one place their shape is
+ * named.
  *
- * Astro 7 removed `Astro.locals.runtime.env`; the runtime's own
- * `cloudflare:workers` module is the way to read a binding — the same module the
- * TanStack unit used. It is not an async-local lookup, so it cannot throw for
- * being called outside a request.
+ * The runtime's own `cloudflare:workers` module is the documented way to read a
+ * binding from anywhere, including module scope. It is not an async-local
+ * lookup, so it cannot throw for being called outside a request. Keeping it
+ * behind this one accessor is what lets the Vitest suite substitute a plain
+ * object (`vitest.config.ts` aliases the specifier).
  *
- * On-demand routes (`/health`, `/revision`, `/api/v0/revision.json`) import this file; every
- * prerendered page is built with no bindings at all. Every field is optional:
- * `getRailsClient()` selects its transport by which binding EXISTS.
+ * Every field is optional: `env.test` declares no VPC service, a plain
+ * `vite build` has no bindings at all, and `getRailsClient()` selects its
+ * transport by which binding EXISTS rather than by an environment name.
+ *
+ * Server-only. `RAILS_STAFF_BASE_ORIGIN` is a public URL, but the VPC binding
+ * beside it is not, and nothing in this module may reach a client bundle.
  */
 export interface EdgeBindings {
   UMAXICA_APPS_EDGE_CF_WORKERS_VPC?: {
@@ -19,6 +24,8 @@ export interface EdgeBindings {
   };
   REVISION?: { id?: string; tag?: string; timestamp?: string };
   RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+  /** Browser-facing Rails staff origin for management links. Not the VPC hop. */
+  RAILS_STAFF_BASE_ORIGIN?: string;
 }
 
 export function getEdgeBindings(): EdgeBindings {

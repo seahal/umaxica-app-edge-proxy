@@ -1,6 +1,6 @@
 /**
  * No surface carries `/health.json` or `/health.html` as a health document.
- * Apex, cores and the twelve Astro surfaces answer liveness on `/health`
+ * Apex, cores and the twelve public content cells answer liveness on `/health`
  * (text/plain). Those two paths are 404 HTML.
  *
  * A leftover `health.json.ts` on any content frame would reintroduce a second
@@ -56,15 +56,15 @@ describe('apex health contract', () => {
 
 describe('content-frame health contract', () => {
   it.each(CONTENT_FRAMES)('%s has no /health.json route', (workspace) => {
-    expect(existsSync(join(repoRoot, workspace, 'src/pages/health.json.ts'))).toBe(false);
+    expect(existsSync(join(repoRoot, workspace, 'src/routes/health[.]json.ts'))).toBe(false);
     expect(existsSync(join(repoRoot, workspace, 'src/routes/health[.]json.ts'))).toBe(false);
     expect(existsSync(join(repoRoot, workspace, 'src/app/health.json/route.ts'))).toBe(false);
   });
 
   it.each(CONTENT_FRAMES)('%s exposes /health', (workspace) => {
-    expect(existsSync(join(repoRoot, workspace, 'src/pages/health.ts'))).toBe(true);
-    expect(existsSync(join(repoRoot, workspace, 'src/pages/health/startups.ts'))).toBe(true);
-    expect(existsSync(join(repoRoot, workspace, 'src/pages/health/livenesses.ts'))).toBe(true);
-    expect(existsSync(join(repoRoot, workspace, 'src/pages/health/readinesses.ts'))).toBe(true);
+    expect(existsSync(join(repoRoot, workspace, 'src/routes/health.ts'))).toBe(true);
+    expect(existsSync(join(repoRoot, workspace, 'src/routes/health.startups.ts'))).toBe(true);
+    expect(existsSync(join(repoRoot, workspace, 'src/routes/health.livenesses.ts'))).toBe(true);
+    expect(existsSync(join(repoRoot, workspace, 'src/routes/health.readinesses.ts'))).toBe(true);
   });
 });

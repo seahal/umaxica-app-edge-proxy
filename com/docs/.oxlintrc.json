@@ -4,7 +4,7 @@
   // unit's stack needs it, not because oxlint ships it. A framework plugin for a
   // framework this unit does not run reports on ordinary code — an `<a>` in a
   // failure document is not a bug — so it stays off.
-  "plugins": ["typescript", "import", "promise", "vitest"],
+  "plugins": ["typescript", "react", "jsx-a11y", "import", "promise", "vitest"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -24,6 +24,11 @@
     "it": "readonly",
     "vi": "readonly"
   },
+  "settings": {
+    "react": {
+      "version": "19"
+    }
+  },
   "rules": {
     "no-unused-vars": "error",
     "no-console": "error",
@@ -32,6 +37,7 @@
     "eqeqeq": "error",
     "no-eval": "error",
     "no-implied-eval": "error",
+    "react/no-danger": "error",
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/consistent-type-imports": "error",
@@ -54,7 +60,7 @@
               "@react-types/*",
               "@internationalized/*"
             ],
-            "message": "Import from `react-aria-components` only. These packages are its internals — `react-aria-components` pulls `react-aria` 3.51.0 and `react-stately` 3.49.0 in itself and imports them at ~790 sites — and this unit declares none of them, so a direct import also depends on a package its package.json does not list. If a react-aria-components API genuinely requires one of these as a value type (@internationalized/date for the date components is the known case), that is a decision to record in docs/design/ui-shell-contract.md §3a, not to work around here."
+            "message": "Import from `react-aria-components` only. These packages are its internals, and this unit declares none of them. See docs/design/ui-shell-contract.md §3a."
           }
         ]
       }
@@ -72,6 +78,7 @@
     "typescript/restrict-template-expressions": "error",
     "typescript/use-unknown-in-catch-callback-variable": "error",
     "typescript/non-nullable-type-assertion-style": "error",
+    "react/react-in-jsx-scope": "off",
     "import/no-unassigned-import": "off",
     "vitest/require-mock-type-parameters": "off",
     "vitest/no-conditional-in-test": "off",
@@ -115,17 +122,19 @@
   },
   "overrides": [
     {
-      // Astro pilot verification scripts (plan Phase 1). Plain Node CLI scripts:
-      // they print to stdout and match patterns in built HTML, so `no-console`
-      // and `require-unicode-regexp` do not apply the way they do to unit code.
-      "files": ["test-astro/**"],
+      // TanStack's control-flow signals are plain objects rather than `Error`
+      // subclasses — `notFound()` and `redirect()` each return one for the caller
+      // to throw, and the router identifies them structurally. Throwing an
+      // `Error` instead would not be recognised at all, so the rule and the
+      // framework's API genuinely disagree.
+      //
+      // Scoped to the route files that raise them rather than disabled
+      // unit-wide, and set here rather than with an inline directive because the
+      // rule is type-aware only — `pnpm run lint` would report the directive
+      // itself as unused. Removable if TanStack ships Error-derived signals.
+      "files": ["src/routes/$lang*.tsx"],
       "rules": {
-        "no-console": "off",
-        "eslint/no-negated-condition": "off",
-        "eslint/require-unicode-regexp": "off",
-        "typescript/prefer-includes": "off",
-        "typescript/no-unsafe-assignment": "off",
-        "typescript/no-unsafe-member-access": "off"
+        "typescript/only-throw-error": "off"
       }
     },
     {
@@ -166,7 +175,7 @@
     "**/dist/**",
     "**/node_modules/**",
     "worker-configuration.d.ts",
-    "**/.astro/**",
+    "**/routeTree.gen.ts",
     "**/+types/**",
     "**/build/**"
   ]

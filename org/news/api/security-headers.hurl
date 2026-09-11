@@ -26,9 +26,10 @@ header "content-security-policy" contains "upgrade-insecure-requests"
 # `script-src` and `style-src` carry 'unsafe-inline' here, and `script-src` also
 # carries 'unsafe-eval', because Vite injects inline scripts of its own.
 #
-# Production answers from `public/_headers` (`script-src 'self'` / `style-src
-# 'self'`, no nonce). A client talking to `astro dev` cannot observe that, so
-# the production half is not asserted here.
+# A PRODUCTION response carries none of the three: it names a per-request nonce
+# instead, which TanStack stamps on the one inline script it emits. No client
+# talking to a dev server can observe that, so the production half is asserted
+# in test/content-security-policy.test.ts.
 #
 # The negative assertions below are the part with teeth: the loosening must stay
 # confined to those two directives whichever server is answering.
@@ -69,11 +70,10 @@ header "x-content-type-options" == "nosniff"
 header "x-frame-options" == "DENY"
 header "referrer-policy" == "no-referrer"
 
-
-
-# The server-error document must carry the same headers as the 404.
-GET {{base}}/500
-HTTP *
+# And on a Publishing failure document, whose status the request boundary
+# rewrites: the rewrite must not drop the headers.
+GET {{base}}/ja/entries/
+HTTP 503
 [Asserts]
 header "content-security-policy" contains "default-src 'self'"
 header "content-security-policy" contains "frame-ancestors 'none'"

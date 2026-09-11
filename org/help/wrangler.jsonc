@@ -7,20 +7,23 @@
   "version_metadata": {
     "binding": "REVISION"
   },
-  // No `main`: the Astro Cloudflare adapter generates the Worker entry for the
-  // on-demand routes and writes the deployable `dist/astro` wrangler.json.
-  // This file supplies bindings, vars and compat settings only.
+  // TanStack Start's server entry, wrapped by `src/request-handler.ts`.
+  "main": "./src/server.ts",
+  // No `directory` and no `binding`: this is the INPUT config, and `vite build`
+  // writes an output wrangler.json whose `assets.directory` points at the client
+  // build. See adr/012-apex-vite-build-and-static-assets.md.
   //
   // Nothing reads an ASSETS binding: assets are matched by Cloudflare BEFORE the
   // Worker runs, so the Worker never has to serve one itself.
   //
-  // Astro emits directory-style HTML (`/ja/index.html`). Cloudflare must map
-  // `/ja/` onto that file. `html_handling: "none"` (the TanStack pin) left
-  // `/ja/` as a 404 with an empty body — measured 2026-09-02. There is no root
-  // `index.html`, so `/` still falls through to the on-demand negotiator.
-  // `not_found_handling: "404-page"` serves the prerendered `404.html`.
-  // `run_worker_first` is deliberately NOT set.
-  "assets": { "html_handling": "auto-trailing-slash", "not_found_handling": "404-page" },
+  // `html_handling: "none"` keeps `/` reachable: every HTML document is rendered
+  // by the Worker, and a stray index.html in the build output must never answer
+  // in place of a route. `not_found_handling: "none"` lets the Worker produce the
+  // 404 document, which is what carries the title and the security headers.
+  // `run_worker_first` is deliberately NOT set: it would invoke the Worker for
+  // every asset request, turning free static-asset serving into billed
+  // invocations.
+  "assets": { "html_handling": "none", "not_found_handling": "none" },
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
@@ -81,14 +84,14 @@
     //
     // Wrangler treats a VPC Service as a resource with no local simulator, so any
     // environment that names one forces a remote proxy session, and that session
-    // needs an interactive `wrangler login` rather than an API token. `astro dev`
+    // needs an interactive `wrangler login` rather than an API token. `vite dev`
     // runs the Worker in workerd, so it would open one — which is why this tier
     // exists rather than reusing `development`.
     //
     // Rails is reached instead through the direct transport
     // in `src/lib/rails-client.ts`, gated on EDGE_LOCAL_NODE_RUNTIME +
     // EDGE_LOCAL_RAILS_ENABLED, over the private Podman network. Measured
-    // 2026-08-22: workerd reaches `http://help.org.localhost:<port>` with
+    // 2026-08-22: workerd reaches `http://docs.app.localhost:<port>` with
     // `global_fetch_strictly_public` set, so that flag needs no exception here.
     //
     // Never deployed. It carries its own rate-limit namespace rather than none:
@@ -110,7 +113,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "5003",
+          "namespace_id": "5001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -159,7 +162,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "2003",
+          "namespace_id": "2001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -191,7 +194,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "4003",
+          "namespace_id": "4001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -214,7 +217,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "3003",
+          "namespace_id": "3001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -226,7 +229,7 @@
   "ratelimits": [
     {
       "name": "RATE_LIMITER",
-      "namespace_id": "1003",
+      "namespace_id": "1001",
       "simple": {
         "limit": 2000,
         "period": 60

@@ -54,7 +54,6 @@
   },
   "include": [
     "cloudflare-env.d.ts",
-    ".astro/types.d.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "test/**/*",

@@ -1,9 +1,10 @@
-# The three documents a user meets when something is wrong: the 404, the
-# offline page, and the server-error splash.
+# The documents a user meets when something is wrong: the 404 and the offline
+# page.
 #
-# Markup lives in `src/pages/404.astro`, `offline.astro`, and `500.astro`.
-# These requests prove those files are actually served on the matching paths
-# (unmatched URL, `/offline`, `/500`), not only that the templates exist.
+# Markup lives in `src/components/status-documents.tsx` and
+# `src/routes/offline.tsx`. These requests prove the router actually serves them
+# on the matching paths, not only that the components exist. A failed Rails read
+# is a third document, asserted in `api/publishing.hurl`.
 
 GET {{base}}/__definitely_not_found__
 HTTP 404
@@ -34,16 +35,3 @@ header "content-type" matches /^text\/html/
 xpath "string(//html/@lang)" == "ja"
 xpath "string(//title)" == "オフライン — UMAXICA (ORG)"
 xpath "//h1" exists
-
-# `/500` is the server-error splash. Reload is forbidden (a herd of retries
-# would load a failing origin). Recovery is a different host.
-GET {{base}}/500
-HTTP *
-[Asserts]
-header "content-type" matches /^text\/html/
-xpath "string(//html/@lang)" == "ja"
-xpath "string(//title)" == "サーバーエラー — UMAXICA (ORG)"
-xpath "//h1" exists
-body contains "稼働状況を見る"
-body contains "https://status.umaxica.dev/"
-body not contains "再読み込み"

@@ -1,40 +1,36 @@
-# Security headers for every response Cloudflare serves from this unit's static
-# build. Astro's `output: 'static'` means these are matched BEFORE any Worker
-# runs — they cover every prerendered page. The two on-demand routes (`/`,
-# `/health`) set their own headers in code.
+# Headers for the files Cloudflare serves BEFORE this Worker runs.
 #
-# This is the CSP the TanStack unit set per-request in `src/security-headers.ts`,
-# minus the nonce. `astro.config.mjs` sets `build.inlineStylesheets: 'never'` and
-# the layout uses no `is:inline` script, so every script and style is a
-# same-origin file: `script-src 'self'` / `style-src 'self'` cover them with no
-# nonce and no per-build hash.
+# Static assets never reach `src/security-headers.ts`, so anything not stated
+# here is served with no security headers at all. That used to include
+# `/favicon.svg`, which is the case that matters: an SVG is a document the
+# browser executes script from when it is navigated to directly, and it was
+# answered from the application's own origin with neither a `nosniff` nor a
+# policy to bound it.
 #
-# `frame-ancestors 'none'` works here (a real header, unlike a `<meta>` CSP).
+# Cloudflare applies every matching block, so the specific blocks below add to
+# this floor rather than replacing it.
+#
+# The floor is deliberately three response headers and NO `Content-Security-Policy`.
+# A CSP here would be inert on the subresources it mostly matches — a policy sent
+# with a `.js` or `.css` file does not govern the document that loaded it — and
+# actively harmful on `/service-worker.js`, where the response's own CSP DOES
+# govern the worker's execution context: a `default-src 'none'` there would block
+# the `fetch()` and `caches` calls the offline fallback is made of. The policy is
+# scoped to the one file that is a document instead.
 /*
-  Content-Security-Policy: default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self' data:; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self'; style-src-attr 'none'; upgrade-insecure-requests
-  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
   Referrer-Policy: no-referrer
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
 
-# Hashed build output: content-addressed, so a one-year immutable cache is honest.
+# Navigating to an SVG on this origin renders it as a document with full script
+# execution in the origin. Today's file is two shapes and no script; this block
+# is what keeps that true of whatever replaces it.
+/favicon.svg
+  Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox
+
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-# The service worker must always be revalidated, and its own CSP must not be the
-# document policy above — `default-src 'self'` is fine for its same-origin
-# `fetch`, and `caches` is not network, so no override is needed here beyond the
-# cache directive.
 /service-worker.js
-  Cache-Control: no-cache, no-store, must-revalidate
-  Content-Type: application/javascript; charset=utf-8
-
-# Unhashed progressive-enhancement scripts: always revalidate.
-/sw-register.js
-  Cache-Control: no-cache, no-store, must-revalidate
-  Content-Type: application/javascript; charset=utf-8
-
-/status-reload.js
-  Cache-Control: no-cache, no-store, must-revalidate
+  Cache-Control: no-cache,no-store,must-revalidate
   Content-Type: application/javascript; charset=utf-8

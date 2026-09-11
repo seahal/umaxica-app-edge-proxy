@@ -35,10 +35,6 @@ allowBuilds:
   workerd: true
 
 catalog:
-  '@astrojs/cloudflare': 14.3.0
-  # React islands on the twelve Astro publishing homes. Pinned next to Astro so
-  # the content surfaces cannot drift onto an integration the 7.3 line rejects.
-  '@astrojs/react': 6.0.5
   '@cloudflare/vite-plugin': ^1.54.3
   '@cloudflare/workers-types': ^5.20260903.1
   '@fontsource-variable/inter': ^5.3.0
@@ -107,8 +103,6 @@ catalog:
   # The spell checker. Pinned here rather than per unit because the dictionary
   # it reads (.cspell/project-words.txt) is repository-wide: a unit resolving a
   # different major could disagree about what the config file even means.
-  # Astro (unscoped). See '@astrojs/cloudflare' above for the pilot rationale.
-  astro: 7.3.1
   cspell: ^10.3.0
   dependency-cruiser: ^18.2.0
   happy-dom: ^20.13.2

@@ -18,7 +18,7 @@ const code = (relativePath: string) =>
 
 const APEX = ['app/apex', 'com/apex', 'org/apex', 'net/apex', 'dev/apex'] as const;
 const CORES = ['app/core', 'com/core', 'org/core'] as const;
-const ASTRO = (['app', 'com', 'org'] as const).flatMap((brand) =>
+const SATELLITES = (['app', 'com', 'org'] as const).flatMap((brand) =>
   (['docs', 'help', 'info', 'news'] as const).map((frame) => `${brand}/${frame}`),
 );
 
@@ -42,19 +42,18 @@ describe('Edge self-health API layout', () => {
     expect(source).not.toContain('checkRailsLiveness');
   });
 
-  it.each(ASTRO)('$0 owns an on-demand Astro endpoint for the literal JSON path', (workspace) => {
-    const file = `${workspace}/src/pages/api/v0/health.json.ts`;
+  it.each(SATELLITES)('$0 owns a TanStack Server Route for the literal JSON path', (workspace) => {
+    const file = `${workspace}/src/routes/api.v0.health[.]json.ts`;
     expect(existsSync(join(repoRoot, file)), file).toBe(true);
-    const source = read(file);
-    expect(source).toContain('export const prerender = false');
-    const stripped = code(file);
-    expect(stripped).toContain('renderHealthApi');
-    expect(stripped).not.toContain('checkRailsHealth');
-    expect(stripped).not.toContain('getRailsClient');
-    expect(stripped).not.toContain('cms');
+    const source = code(file);
+    expect(source).toContain("createFileRoute('/api/v0/health.json')");
+    expect(source).toContain('renderHealthApi');
+    expect(source).not.toContain('checkRailsHealth');
+    expect(source).not.toContain('getRailsClient');
+    expect(source).not.toContain('publishing');
   });
 
-  it.each([...APEX, ...CORES, ...ASTRO])('$0 ships the Hurl contract', (workspace) => {
+  it.each([...APEX, ...CORES, ...SATELLITES])('$0 ships the Hurl contract', (workspace) => {
     const file = `${workspace}/api/health-api.hurl`;
     expect(existsSync(join(repoRoot, file)), file).toBe(true);
     const source = read(file);
@@ -66,14 +65,14 @@ describe('Edge self-health API layout', () => {
 
   it('keeps Hurl contracts byte-identical across all twenty units', () => {
     const digests = new Set(
-      [...APEX, ...CORES, ...ASTRO].map((workspace) => read(`${workspace}/api/health-api.hurl`)),
+      [...APEX, ...CORES, ...SATELLITES].map((workspace) => read(`${workspace}/api/health-api.hurl`)),
     );
     expect(digests.size).toBe(1);
   });
 
-  it('keeps Astro self-health routes byte-identical', () => {
+  it('keeps public content cell self-health routes byte-identical', () => {
     const digests = new Set(
-      ASTRO.map((workspace) => read(`${workspace}/src/pages/api/v0/health.json.ts`)),
+      SATELLITES.map((workspace) => read(`${workspace}/src/routes/api.v0.health[.]json.ts`)),
     );
     expect(digests.size).toBe(1);
   });
@@ -85,11 +84,6 @@ describe('Edge self-health API layout', () => {
     expect(digests.size).toBe(1);
   });
 
-  it.each(ASTRO)('$0 middleware does not force health JSON to text/plain', (workspace) => {
-    const source = code(`${workspace}/src/middleware.ts`);
-    expect(source).toContain("path === '/api/v0/health.json'");
-    expect(source).toContain("'application/json; charset=utf-8'");
-  });
 
   it.each(CORES)('$0 dispatch keeps self-health on Edge, not Rails', (workspace) => {
     const source = code(`${workspace}/src/lib/core-dispatch.ts`);

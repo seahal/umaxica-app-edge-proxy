@@ -2,4 +2,3 @@
 cloudflare-env.d.ts
 dist
 node_modules
-.astro

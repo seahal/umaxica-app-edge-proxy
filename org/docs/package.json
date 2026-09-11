@@ -4,17 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "EDGE_LOCAL_NODE_RUNTIME=1 CLOUDFLARE_ENV=local PUBLIC_REGION=jp astro dev --port 5306 --host",
-    "dev:vpc": "CLOUDFLARE_ENV=vpc PUBLIC_REGION=jp astro dev --port 5306 --host",
-    "build": "CLOUDFLARE_ENV= PUBLIC_REGION=jp astro build",
-    "preview": "pnpm run build && node ../../tools/preview-astro-worker.mjs --port 5306",
+    "dev": "EDGE_LOCAL_NODE_RUNTIME=1 CLOUDFLARE_ENV=local PUBLIC_REGION=jp vite dev --port 5306 --host",
+    "dev:vpc": "CLOUDFLARE_ENV=vpc PUBLIC_REGION=jp vite dev --port 5306 --host",
+    "build": "CLOUDFLARE_ENV= PUBLIC_REGION=jp vite build",
+    "preview": "pnpm run build && CLOUDFLARE_ENV= vite preview --port 5306",
     "deploy": "pnpm run build && CLOUDFLARE_ENV= wrangler deploy",
     "deploy:upload": "pnpm run build && CLOUDFLARE_ENV= wrangler versions upload",
     "deploy:promote": "CLOUDFLARE_ENV= wrangler versions deploy --config wrangler.jsonc --yes",
     "upload:ci": "pnpm run build && CLOUDFLARE_ENV= wrangler versions upload",
     "deploy:ci": "pnpm run build && CLOUDFLARE_ENV= wrangler deploy",
     "cf-typegen": "CLOUDFLARE_ENV= wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
-    "typecheck": "pnpm run cf-typegen && astro sync && tsc --noEmit",
+    "typecheck": "pnpm run cf-typegen && tsc --noEmit",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
     "test:stress": "vitest run --sequence.shuffle --no-cache",
@@ -29,22 +29,28 @@
     "lint:fix": "oxlint --type-aware --fix .",
     "check:generated": "pnpm run cf-typegen && CLOUDFLARE_ENV= wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts --check",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run lint:types && pnpm run check:generated && pnpm run typecheck && pnpm run knip",
-    "check:size": "size-limit",
-    "verify:seo": "pnpm run build && node test-astro/verify-seo.mjs"
+    "check:size": "size-limit"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "catalog:",
-    "@fontsource-variable/inter": "catalog:"
+    "@fontsource-variable/inter": "catalog:",
+    "@tanstack/react-router": "catalog:",
+    "@tanstack/react-start": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "catalog:",
     "@cloudflare/workers-types": "catalog:",
     "@orangeopensource/hurl": "catalog:",
     "@playwright/test": "catalog:",
     "@size-limit/file": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@testing-library/jest-dom": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "astro": "catalog:",
     "happy-dom": "catalog:",
     "knip": "catalog:",
     "oxfmt": "catalog:",
@@ -56,5 +62,11 @@
     "vite": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:"
-  }
+  },
+  "browserslist": [
+    "chrome 111",
+    "edge 111",
+    "firefox 111",
+    "safari 16.4"
+  ]
 }

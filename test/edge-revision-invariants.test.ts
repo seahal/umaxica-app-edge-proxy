@@ -16,7 +16,7 @@ const code = (relativePath: string) =>
 
 const APEX = ['app/apex', 'com/apex', 'org/apex', 'net/apex', 'dev/apex'] as const;
 const CORES = ['app/core', 'com/core', 'org/core'] as const;
-const ASTRO = (['app', 'com', 'org'] as const).flatMap((brand) =>
+const SATELLITES = (['app', 'com', 'org'] as const).flatMap((brand) =>
   (['docs', 'help', 'info', 'news'] as const).map((frame) => `${brand}/${frame}`),
 );
 
@@ -46,21 +46,22 @@ describe('Edge revision representations', () => {
     expect(json).not.toContain('text/plain');
   });
 
-  it.each(ASTRO)('$0 owns on-demand Astro endpoints for both representations', (workspace) => {
-    const textFile = `${workspace}/src/pages/revision.ts`;
-    const jsonFile = `${workspace}/src/pages/api/v0/revision.json.ts`;
+  it.each(SATELLITES)('$0 owns TanStack Server Routes for both representations', (workspace) => {
+    const textFile = `${workspace}/src/routes/revision.ts`;
+    const jsonFile = `${workspace}/src/routes/api.v0.revision[.]json.ts`;
+    expect(existsSync(join(repoRoot, textFile)), textFile).toBe(true);
     expect(existsSync(join(repoRoot, jsonFile)), jsonFile).toBe(true);
-    expect(read(textFile)).toContain('export const prerender = false');
-    expect(read(jsonFile)).toContain('export const prerender = false');
     const text = code(textFile);
     const json = code(jsonFile);
+    expect(text).toContain("createFileRoute('/revision')");
     expect(text).toContain('revisionTextResponse');
     expect(text).not.toContain('application/json');
+    expect(json).toContain("createFileRoute('/api/v0/revision.json')");
     expect(json).toContain('revisionJsonResponse');
     expect(json).not.toContain('text/plain');
   });
 
-  it.each([...APEX, ...CORES, ...ASTRO])(
+  it.each([...APEX, ...CORES, ...SATELLITES])(
     '$0 ships the Hurl JSON contract and Playwright text contract',
     (workspace) => {
       const hurl = `${workspace}/api/revision-api.hurl`;
@@ -80,29 +81,26 @@ describe('Edge revision representations', () => {
 
   it('keeps Hurl revision API contracts byte-identical across all twenty units', () => {
     const digests = new Set(
-      [...APEX, ...CORES, ...ASTRO].map((workspace) => read(`${workspace}/api/revision-api.hurl`)),
+      [...APEX, ...CORES, ...SATELLITES].map((workspace) => read(`${workspace}/api/revision-api.hurl`)),
     );
     expect(digests.size).toBe(1);
   });
 
   it('keeps Playwright revision contracts byte-identical across all twenty units', () => {
     const digests = new Set(
-      [...APEX, ...CORES, ...ASTRO].map((workspace) => read(`${workspace}/e2e/revision.spec.ts`)),
+      [...APEX, ...CORES, ...SATELLITES].map((workspace) => read(`${workspace}/e2e/revision.spec.ts`)),
     );
     expect(digests.size).toBe(1);
   });
 
-  it('keeps Astro revision helpers and JSON routes byte-identical', () => {
-    expect(
-      new Set(ASTRO.map((workspace) => read(`${workspace}/src/lib/version-metadata.ts`))).size,
-    ).toBe(1);
-    expect(
-      new Set(ASTRO.map((workspace) => read(`${workspace}/src/pages/api/v0/revision.json.ts`)))
-        .size,
-    ).toBe(1);
-    expect(new Set(ASTRO.map((workspace) => read(`${workspace}/src/pages/revision.ts`))).size).toBe(
-      1,
-    );
+  it('keeps public content cell revision helpers and routes byte-identical', () => {
+    for (const file of [
+      'src/lib/version-metadata.ts',
+      'src/routes/api.v0.revision[.]json.ts',
+      'src/routes/revision.ts',
+    ]) {
+      expect(new Set(SATELLITES.map((workspace) => read(`${workspace}/${file}`))).size, file).toBe(1);
+    }
   });
 
   it('keeps TanStack revision helpers and JSON routes byte-identical', () => {
@@ -115,11 +113,4 @@ describe('Edge revision representations', () => {
     ).toBe(1);
   });
 
-  it.each(ASTRO)('$0 middleware pins revision media types', (workspace) => {
-    const source = code(`${workspace}/src/middleware.ts`);
-    expect(source).toContain("path === '/revision'");
-    expect(source).toContain("path === '/api/v0/revision.json'");
-    expect(source).toContain("'text/plain; charset=utf-8'");
-    expect(source).toContain("'application/json; charset=utf-8'");
-  });
 });

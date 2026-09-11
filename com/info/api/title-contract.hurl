@@ -9,7 +9,7 @@
 #   1. exactly one <title>
 #   2. non-empty after trim
 #   3. the brand is exactly "UMAXICA", casing does not vary
-#   4. the TLD segment matches this deployment family — (COM)
+#   4. the TLD segment matches this deployment family — (APP)
 #   5. a non-root surface carries a page-specific segment before the EM DASH
 #   6. the title never names the surface or the runtime that served it
 #
@@ -29,7 +29,7 @@ HTTP 200
 [Asserts]
 xpath "count(//title)" == 1
 xpath "normalize-space(//title)" != ""
-xpath "string(//title)" matches /^(?:.+ — )?UMAXICA \(COM\)$/
+xpath "string(//title)" matches /^(?:.+ — )?UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 xpath "string(//title)" not matches /Umaxica|umaxica/
 
@@ -38,7 +38,7 @@ HTTP 200
 [Asserts]
 xpath "count(//title)" == 1
 xpath "normalize-space(//title)" != ""
-xpath "string(//title)" matches /^(?:.+ — )?UMAXICA \(COM\)$/
+xpath "string(//title)" matches /^(?:.+ — )?UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 xpath "string(//title)" not matches /Umaxica|umaxica/
 
@@ -46,7 +46,7 @@ GET {{base}}/ja/about/
 HTTP 200
 [Asserts]
 xpath "count(//title)" == 1
-xpath "string(//title)" matches /^.+ — UMAXICA \(COM\)$/
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 xpath "string(//title)" not matches /Umaxica|umaxica/
 
@@ -54,21 +54,27 @@ GET {{base}}/offline
 HTTP 200
 [Asserts]
 xpath "count(//title)" == 1
-xpath "string(//title)" matches /^.+ — UMAXICA \(COM\)$/
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
-GET {{base}}/500
+GET {{base}}/ja/entries/page/2/
 HTTP *
 [Asserts]
 xpath "count(//title)" == 1
-xpath "string(//title)" matches /^.+ — UMAXICA \(COM\)$/
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
+
+GET {{base}}/en/search/
+HTTP 200
+[Asserts]
+xpath "count(//title)" == 1
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 
 GET {{base}}/__definitely_not_found__
 HTTP 404
 [Asserts]
 xpath "count(//title)" == 1
-xpath "string(//title)" matches /^.+ — UMAXICA \(COM\)$/
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
 

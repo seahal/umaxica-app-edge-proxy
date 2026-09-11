@@ -151,15 +151,9 @@ function viteApps(): { workspace: string; family: string; role: string; tld: str
     .sort((a, b) => a.workspace.localeCompare(b.workspace));
 }
 
-/** Every Astro public content surface, derived from tracked Base layouts. */
-function astroApps(): { workspace: string; family: string; role: string; tld: string }[] {
-  return trackedFiles()
-    .filter((file) => file.endsWith('/src/layouts/Base.astro'))
-    .map((file) => {
-      const [family = '', role = ''] = file.split('/');
-      return { workspace: `${family}/${role}`, family, role, tld: FAMILY_TLD[family] ?? '' };
-    })
-    .sort((a, b) => a.workspace.localeCompare(b.workspace));
+/** The twelve public content cells (TanStack Start, adr/019), a subset of viteApps(). */
+function contentCells(): { workspace: string; family: string; role: string; tld: string }[] {
+  return viteApps().filter((app) => ['docs', 'help', 'info', 'news'].includes(app.role));
 }
 
 /** Every Next.js deployment unit, derived from tracked root layouts. */
@@ -207,7 +201,7 @@ describe('root layout metadata', () => {
   const apps = nextApps();
 
   it('covers every content frame, across both bundlers', () => {
-    expect([...apps, ...viteApps(), ...astroApps()].map((app) => app.workspace).sort()).toEqual(
+    expect([...apps, ...viteApps()].map((app) => app.workspace).sort()).toEqual(
       [...EXPECTED_FRAMES].sort(),
     );
   });
@@ -470,9 +464,9 @@ describe('rate limited 429 documents', () => {
    * Matching on `src/lib/rate-limit.ts` — the file that has to exist for the unit
    * to limit anything at all — can.
    */
-  const contentSurfaces = astroApps().map((app) => app.workspace);
+  const contentSurfaces = contentCells().map((app) => app.workspace);
 
-  it('covers every astro content surface', () => {
+  it('covers every public content cell', () => {
     expect(
       trackedFiles()
         .filter((file) => file.endsWith('/src/lib/rate-limit.ts') && !file.includes('/core/'))
@@ -550,46 +544,19 @@ describe('rate limited 429 documents', () => {
  * the one trap this migration actually hit stays closed — a title on the root
  * route plus a title in a failure document produces TWO `<title>` elements.
  */
-describe('Astro content-surface title contract', () => {
-  const apps = astroApps();
+describe('public content cell title contract', () => {
+  const apps = contentCells();
   const read = (relativePath: string) => readFileSync(join(repoRoot, relativePath), 'utf8');
 
-  it.each(apps)('$workspace names the brand once, in one place', ({ workspace, tld }) => {
-    const source = read(`${workspace}/src/lib/title.ts`);
-    expect(source, `${workspace}: BRAND_TITLE must match the deployment family`).toContain(
-      `export const BRAND_TITLE = 'UMAXICA (${tld})'`,
-    );
-    expect(source).toContain('return `${pageTitle} — ${BRAND_TITLE}`;');
+  it('covers all twelve cells', () => {
+    expect(apps).toHaveLength(12);
   });
 
-  it.each(apps)(
-    '$workspace titles the layout from the page, not a root default',
-    ({ workspace }) => {
-      const layout = read(`${workspace}/src/layouts/Base.astro`);
-      expect(layout).toContain('<title>{title}</title>');
-      expect(layout).not.toMatch(/brandTitle\(/u);
-    },
-  );
-
-  it.each(apps)('$workspace titles both public documents and the 404', ({ workspace, tld }) => {
-    const pages = [
-      `${workspace}/src/pages/ja/index.astro`,
-      `${workspace}/src/pages/ja/about.astro`,
-      `${workspace}/src/pages/[lang]/entries/index.astro`,
-      `${workspace}/src/layouts/StatusSplash.astro`,
-      `${workspace}/src/pages/404.astro`,
-    ];
-    for (const page of pages) {
-      const source = read(page);
-      expect(source, `${page}: declares no title`).toMatch(/brandTitle\(/u);
-    }
-    const notFound = read(`${workspace}/src/pages/404.astro`);
-    expect(notFound).toContain('HTTP 404');
-    expectTitleContract(`<title>ページが見つかりません — UMAXICA (${tld})</title>`, {
-      tld,
-      requirePageSpecific: true,
-      label: `${workspace} 404`,
-    });
+  it.each(apps)('$workspace names the brand once, in its cell file', ({ workspace, tld }) => {
+    expect(read(`${workspace}/src/lib/publishing-cell.ts`)).toContain(
+      `export const BRAND_TITLE = 'UMAXICA (${tld})'`,
+    );
+    expect(read(`${workspace}/src/lib/title.ts`)).toContain('return `${pageTitle} — ${BRAND_TITLE}`;');
   });
 });
 
@@ -608,13 +575,16 @@ describe('TanStack Start title contract', () => {
     );
 
   it.each(apps)('$workspace names the brand once, in one place', ({ workspace, tld }) => {
-    const source = read(`${workspace}/src/lib/title.ts`);
+    const brandFile = existsSync(join(repoRoot, workspace, 'src/lib/publishing-cell.ts'))
+      ? 'src/lib/publishing-cell.ts'
+      : 'src/lib/title.ts';
+    const source = read(`${workspace}/${brandFile}`);
 
     expect(source, `${workspace}: BRAND_TITLE must match the deployment family`).toContain(
       `export const BRAND_TITLE = 'UMAXICA (${tld})'`,
     );
     // The EM DASH, with one space on each side. Not a hyphen, not an EN DASH.
-    expect(source).toContain('return `${pageTitle} — ${BRAND_TITLE}`;');
+    expect(read(`${workspace}/src/lib/title.ts`)).toContain('return `${pageTitle} — ${BRAND_TITLE}`;');
   });
 
   it.each(apps)('$workspace declares no title on the root route', ({ workspace }) => {
@@ -655,7 +625,10 @@ describe('TanStack Start title contract', () => {
         // The pathless layout wraps documents; it answers no URL of its own.
         name !== '_page.tsx' &&
         // A redirect renders nothing, so it is explicitly outside the contract.
-        name !== '_page.home.tsx',
+        name !== '_page.home.tsx' &&
+        // The locale layout of a content cell validates `{lang}` and renders
+        // its child; it answers no URL of its own.
+        name !== '$lang.tsx',
     );
 
     expect(documents.length, `${workspace}: found no route documents`).toBeGreaterThan(0);
@@ -720,7 +693,9 @@ describe('TanStack Start title contract', () => {
     expect(source).toContain('HTTP 500');
   });
 
-  it.each(apps)('$workspace serves a titled 429 document', ({ workspace, tld }) => {
+  // The content cells build their 429 title from BRAND_TITLE, so their document is
+  // driven for real by the injected-limiter guard above rather than read here.
+  it.each(apps.filter((app) => app.role === 'core'))('$workspace serves a titled 429 document', ({ workspace, tld }) => {
     /*
      * The satellites' 429 lived in `src/middleware.ts` and was asserted by
      * importing it. A TanStack frame answers it from `src/rate-limit.ts`, called

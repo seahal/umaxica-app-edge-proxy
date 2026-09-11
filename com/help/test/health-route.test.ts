@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkRailsHealth } from '../src/lib/rails-health';
 import * as runtimeHealth from '../src/lib/runtime-health';
 import { resetEnv, setEnv } from './__mocks__/cloudflare-workers';
-import { handlers } from './utils/handlers';
+import { handlers } from './utils/routes';
 
 const GET = handlers.health;
 

@@ -1,21 +1,20 @@
-// First-touch rate limiting for this content surface (adr/010, adr/015).
+// First-touch rate limiting for this content unit (adr/010).
 //
-// The behaviour asserted here is the one the unit had before the Astro
-// conversion dropped it: no binding is a pass-through, an allowance is a
-// pass-through, and a refusal is the bare 429 document. What changed is the
-// signature — the limiter is a parameter now rather than a module-scope `env`
-// read, so `src/middleware.ts` supplies it and this file does not need
-// `cloudflare:workers` at all.
+// No binding is a pass-through, an allowance is a pass-through, and a refusal is
+// the bare 429 document. The limiter is a parameter rather than a module-scope
+// `env` read, so `src/request-handler.ts` supplies it and this file does not
+// need `cloudflare:workers` at all.
 
 import { describe, expect, it, vi } from 'vitest';
 
 import { checkRateLimit } from '../../src/lib/rate-limit';
+import { BRAND_TITLE } from '../../src/lib/title';
 
 function request(headers: Record<string, string> = {}): Request {
   return new Request('http://localhost/', { headers });
 }
 
-describe('app/news rate limiting', () => {
+describe('rate limiting', () => {
   it('passes the request through when no RATE_LIMITER binding is present', async () => {
     await expect(checkRateLimit(request(), undefined)).resolves.toBeNull();
   });
@@ -43,7 +42,7 @@ describe('app/news rate limiting', () => {
     const response = await checkRateLimit(request(), { limit });
 
     await expect(response?.text()).resolves.toContain(
-      '<title>リクエストを処理できませんでした — UMAXICA (APP)</title>',
+      `<title>リクエストを処理できませんでした — ${BRAND_TITLE}</title>`,
     );
   });
 

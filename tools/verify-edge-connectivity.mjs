@@ -87,7 +87,7 @@ export function railsBackedWorkspaces(manifest = loadManifest()) {
   return [
     ...manifest.railsBacked,
     ...(manifest.railsBackedVite ?? []),
-    ...(manifest.railsBackedAstro ?? []),
+    ...(manifest.railsBackedVpcVite ?? []),
   ].sort((a, b) => a.localeCompare(b));
 }
 
@@ -227,15 +227,18 @@ export function tunnelHostFor(brand, frame, env = process.env) {
 /**
  * The Rails origin a frame will send in local development.
  *
- * An Astro surface names it as `PRIVATE_RAILS_ORIGIN` in its rails-client copy.
+ * A public content cell names it as `PRIVATE_RAILS_ORIGIN` in its
+ * `src/lib/publishing-cell.ts`.
  * A Core names it as the opt-in `RAILS_ORIGIN=` line in its `.dev.vars.example`
  * instead — the Cores reach Rails over the public internet at a per-tier var,
  * not over Workers VPC (ADR 018).
  */
 export function readRailsOrigin(ws) {
-  const source = readFileSync(join(repoRoot, ws, 'src/lib/rails-client.ts'), 'utf8');
-  const constant = /PRIVATE_RAILS_ORIGIN\s*=\s*'([^']+)'/u.exec(source)?.[1];
-  if (constant) return constant;
+  const cellPath = join(repoRoot, ws, 'src/lib/publishing-cell.ts');
+  if (existsSync(cellPath)) {
+    const constant = /PRIVATE_RAILS_ORIGIN\s*=\s*'([^']+)'/u.exec(readFileSync(cellPath, 'utf8'))?.[1];
+    if (constant) return constant;
+  }
   const examplePath = join(repoRoot, ws, '.dev.vars.example');
   if (!existsSync(examplePath)) return null;
   return /^#?\s*RAILS_ORIGIN=(\S+)$/mu.exec(readFileSync(examplePath, 'utf8'))?.[1] ?? null;
@@ -243,7 +246,7 @@ export function readRailsOrigin(ws) {
 
 /** Whether a surface reaches Rails over Workers VPC. The Cores do not (ADR 018). */
 export function isVpcSurface(surface, manifest = loadManifest()) {
-  return (manifest.railsBackedAstro ?? []).includes(surface.ws);
+  return (manifest.railsBackedVpcVite ?? []).includes(surface.ws);
 }
 
 // ---------------------------------------------------------------------------

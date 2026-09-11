@@ -57,12 +57,18 @@ xpath "count(//title)" == 1
 xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
-GET {{base}}/500
+GET {{base}}/ja/entries/page/2/
 HTTP *
 [Asserts]
 xpath "count(//title)" == 1
 xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
+
+GET {{base}}/en/search/
+HTTP 200
+[Asserts]
+xpath "count(//title)" == 1
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 
 GET {{base}}/__definitely_not_found__
 HTTP 404

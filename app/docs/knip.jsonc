@@ -1,29 +1,33 @@
+// Knip boundary for ONE deployment unit (a TanStack Start public content unit
+// on Cloudflare Workers).
+//
+// This file is deliberately self-contained: it extends nothing at the
+// repository root, so this directory stays valid if it is ever extracted into
+// its own repository. Knip finds no pnpm-workspace.yaml at this level, so it
+// analyses this unit alone and never reaches a sibling unit.
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
 
-  // Knip boundary for ONE deployment unit: app/docs (Astro on Cloudflare Workers).
-  // Astro discovers `src/pages/**` by convention; `astro.config.mjs` is the
-  // config entry. Wrangler bindings live in `wrangler.jsonc` (no `main` — the
-  // adapter emits the Worker entry).
-  "entry": [
-    "src/pages/**/*.{ts,astro}",
-    "src/**/*.astro",
-    "test/**/*.test.ts",
-    "e2e/**/*.spec.ts",
-    "test-astro/**/*.mjs"
-  ],
+  // The runtime entrypoint is read from wrangler.jsonc by Knip's wrangler
+  // plugin, and the Vite config by its vite plugin. What neither can see is the
+  // TanStack Start route tree: every file under `src/routes/` is discovered by
+  // the router plugin at build time and generated into `src/routeTree.gen.ts`,
+  // which nothing in the repository imports by hand.
+  "entry": ["src/routes/**/*.{ts,tsx}", "test/**/*.test.{ts,tsx}", "e2e/**/*.spec.ts"],
 
-  "project": ["**/*.{ts,css,astro,mjs}"],
+  "project": ["**/*.{ts,tsx,css}"],
 
-  "astro": {
-    "config": ["astro.config.mjs"],
-    "entry": ["src/pages/**/*.{astro,ts}", "src/content.config.ts"]
-  },
-
+  // `catalog:` version specifiers resolve from the repository-root
+  // pnpm-workspace.yaml, which does not exist inside this unit. That is a
+  // version-resolution concern rather than an unused-code one.
   "exclude": ["catalogReferences"],
 
-  // `cloudflare` is not a package. `src/lib/env.ts` imports `cloudflare:workers`.
+  // `cloudflare` is not a package. `src/lib/env.ts` imports `cloudflare:workers`,
+  // a module the Workers runtime provides, and Knip reads the part before the
+  // colon as a package name.
   "ignoreDependencies": ["cloudflare"],
 
+  // Types and constants that a module exports as part of its own public surface
+  // and also consumes internally are not dead code.
   "ignoreExportsUsedInFile": true
 }

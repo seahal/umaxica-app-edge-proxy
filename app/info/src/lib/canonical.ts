@@ -1,19 +1,15 @@
-import { PUBLIC_REGION } from 'astro:env/client';
+import { CANONICAL_ORIGINS } from './publishing-cell';
 
 /*
- * This frame's public origin, and the only place it is written.
+ * This unit's public origin, and the only place it is chosen.
  *
- * `robots.txt`, `sitemap.xml`, every `<link rel="canonical">` and every
- * hreflang alternate name it, and they must not disagree.
+ * `robots.txt`, `sitemap.xml`, every `<link rel="canonical">` and every hreflang
+ * alternate name it, and they must not disagree.
  *
- * Region (jp/us) is a build-time input. `PUBLIC_REGION` — validated by the
- * `env.schema` in `astro.config.mjs` — selects the origin, exactly as the
- * TanStack unit hardcoded a single `CANONICAL_ORIGIN` per unit. One build per
- * region.
+ * Region (jp/us) is a build-time input: `vite.config.ts` replaces
+ * `import.meta.env.PUBLIC_REGION` with a literal, so one build serves one
+ * region. Anything other than `us` — including an unset variable under Vitest —
+ * selects `jp`, which is what every build script passes today.
  */
-const ORIGIN_BY_REGION = {
-  jp: 'https://info-jp.umaxica.app',
-  us: 'https://info-us.umaxica.app',
-} as const;
-
-export const CANONICAL_ORIGIN: string = ORIGIN_BY_REGION[PUBLIC_REGION];
+export const CANONICAL_ORIGIN: string =
+  import.meta.env.PUBLIC_REGION === 'us' ? CANONICAL_ORIGINS.us : CANONICAL_ORIGINS.jp;
