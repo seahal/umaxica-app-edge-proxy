@@ -142,7 +142,8 @@ describe('Publishing contract, asserted on the one shared implementation', () =>
       (file) => file.startsWith('app/docs/src/') && existsSync(join(repoRoot, file)),
     );
     for (const file of sources) {
-      expect(read(file), file).not.toMatch(/\bcreateServerFn\b/u);
+      // Name mentions in comments are fine; an import or call is not.
+      expect(read(file), file).not.toMatch(/\bcreateServerFn(?:\s*\(|\s*\})/u);
       expect(read(file), file).not.toContain('cookieStore');
       expect(read(file), file).not.toContain('document.cookie');
     }
