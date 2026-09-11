@@ -1,0 +1,20 @@
+{
+	"pid": 60594,
+	"port": 5303,
+	"url": "http://localhost:5303",
+	"urls": {
+		"local": [
+			"http://localhost:5303/"
+		],
+		"network": [
+			"http://10.89.4.3:5303/",
+			"http://10.89.5.2:5303/"
+		],
+		"networkInterfaceNames": [
+			"eth0",
+			"eth1"
+		]
+	},
+	"background": false,
+	"startedAt": "2026-09-10T19:02:07.838Z"
+}
