@@ -93,7 +93,7 @@ catalog:
   # here changes what a test MEANS rather than whether it runs.
   '@testing-library/jest-dom': ^7.0.1
   '@testing-library/react': ^16.3.3
-  '@types/node': ^26.5.0
+  '@types/node': ^26.5.1
   '@types/react': ^19.2.18
   '@types/react-dom': ^19.2.7
   # React Fast Refresh and the JSX transform for the Vite-built units. The five
@@ -109,19 +109,19 @@ catalog:
   # different major could disagree about what the config file even means.
   # Astro (unscoped). See '@astrojs/cloudflare' above for the pilot rationale.
   astro: 7.3.1
-  cspell: ^10.2.2
+  cspell: ^10.3.0
   dependency-cruiser: ^18.2.0
   happy-dom: ^20.13.2
   hono: ^4.13.7
-  knip: ^6.34.0
+  knip: ^6.35.1
   # The static analysis toolchain. These were literal strings in twenty-two
   # manifests until they drifted (knip sat at 6.32.1 in every unit and 6.32.2 at
   # the root), which is exactly the failure a catalog exists to prevent: a lint
   # or type rule that fires in CI and not on a developer's machine is worse than
   # the rule being off. oxlint and oxlint-tsgolint in particular have to move
   # together — tsgolint is the type-aware backend oxlint shells out to.
-  oxfmt: ^0.66.0
-  oxlint: 1.81.0
+  oxfmt: ^0.67.0
+  oxlint: 1.82.0
   oxlint-tsgolint: ^7.0.2001
   react: ^19.2.8
   react-aria-components: ^1.21.0
@@ -158,7 +158,7 @@ catalog:
   # Floor set by `@cloudflare/vite-plugin`'s peer range (^4.127.0), not chosen
   # independently. Bumping the plugin without bumping this is a resolution
   # failure rather than a subtle one.
-  wrangler: ^4.129.1
+  wrangler: ^4.130.0
 
 ignoredBuiltDependencies:
   - esbuild
