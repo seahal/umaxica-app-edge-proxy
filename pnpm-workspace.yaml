@@ -158,7 +158,7 @@ catalog:
   # Floor set by `@cloudflare/vite-plugin`'s peer range (^4.127.0), not chosen
   # independently. Bumping the plugin without bumping this is a resolution
   # failure rather than a subtle one.
-  wrangler: ^4.131.0
+  wrangler: ^4.131.1
 
 ignoredBuiltDependencies:
   - esbuild
