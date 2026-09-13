@@ -1,22 +1,17 @@
 # Dev Containers CLI startup on rootless Podman
 
-This repository has no launcher script. `podman/tools/dcup` used to be one; it was removed
-because it was a wrapper around `devcontainer up` and nothing more. Everything it appeared to
-configure — the rootless user mapping, the workspace bind, the port publication, the build
-arguments — already lives in `compose.yaml` and `.devcontainer/devcontainer.json`, and Dev
-Containers CLI reads both itself. Only two flags and one environment variable were load-bearing, and they
-are written out below instead of hidden behind a script.
+`scripts/devcontainer-up` is the supported CLI entry point. The Podman options could be typed
+directly, but the launcher also holds a host-user-wide lock while `devcontainer up` runs.
+That lock is required because Dev Containers CLI 0.89.0 hard-codes the fallback Feature-content
+image name `dev_container_feature_content_temp`; concurrent Podman builds from different
+repositories can otherwise replace the image before its consuming `COPY` runs.
 
 ## Starting the container
 
 From the repository root:
 
 ```bash
-PODMAN_COMPOSE_PROVIDER=/usr/bin/podman-compose \
-devcontainer up \
-  --docker-path /usr/bin/podman \
-  --docker-compose-path /usr/bin/podman-compose \
-  --workspace-folder .
+scripts/devcontainer-up
 ```
 
 Then open a shell — `--docker-path` is required here too:
@@ -44,9 +39,13 @@ Compose is trying to reach a Docker daemon. This was verified on this host, not 
 paths where it invokes a standalone Compose binary instead of the subcommand. It is not a
 substitute for the environment variable.
 
-`--workspace-folder .` — the CLI has no implicit current-directory default worth relying on.
-Naming the folder makes the command copy-pasteable and makes it obvious that it must be run
-from the repository root.
+`--workspace-folder` — the launcher resolves the repository root from its own location, so it
+does not depend on the caller's current directory.
+
+The lock is `${XDG_RUNTIME_DIR:-/tmp}/devcontainers-feature-content.lock`. Its name is
+deliberately not Edge-specific: launchers for other repositories using the same rootless Podman
+storage must take the same lock. If another cooperating build is active, this launcher waits
+instead of allowing the shared temporary image tag to be replaced.
 
 ## What the configuration already does
 
@@ -64,7 +63,8 @@ pins the in-container id, so the host id no longer needs to be discovered, and e
 file sets the same `name: umaxica-apps-edge`, so no new project name can appear for this
 folder.
 
-`devcontainer.json` lists `../compose.yaml` and nothing else. The Dev Containers CLI passes
+`devcontainer.json` lists `../compose.yaml` and `./compose.yaml` — the shared services and
+`core` — and nothing else. The Dev Containers CLI passes
 each `dockerComposeFile` entry to Compose as `-f`, so an entry a fresh clone does not contain
 fails the whole `up` at configuration resolution — which is how a gitignored overlay used to
 break Codespaces. The same `-f` also suppresses Compose's auto-discovery of
@@ -82,9 +82,10 @@ The Podman-specific properties are Compose concerns and need no flags:
 `CONTAINER_UID`/`CONTAINER_GID` build arguments, loopback-only port publication on
 `127.0.0.1`, and the named volumes
 `node-volume`, `home-cache`, `pnpm-store`, and `workspace-secrets-mask`. The
-Edge's `cloudflare-tunnel` sidecar is declared in `compose.yaml` beside `core`, uses the compose default
-network, and requires `EDGE_CLOUDFLARED_TOKEN` (or, as a fallback, `CLOUDFLARED_TOKEN`) from the gitignored
-root `.env`.
+Edge's `cloudflare-tunnel` sidecar is declared in `compose.yaml`, uses the compose default
+network, and requires `CLOUDFLARED_TOKEN` from this repository's gitignored root `.env` — one variable,
+no fallback. It must be Edge's own tunnel, never the value Global keeps under the same name in its own
+`.env`; see `adr/014-edge-owned-development-tunnel.md`.
 
 ## What is now your responsibility
 
@@ -104,7 +105,7 @@ Do not add `--mount`, `--secrets-file`, `--remote-env`, `--config`, or `--overri
 Each of them reaches past the repository's security boundary and injects host state the image
 is built to exclude.
 
-Add `--remove-existing-container` when a previous start failed partway. A `Created` or
+Pass `--remove-existing-container` to the launcher when a previous start failed partway. A `Created` or
 `Exited` container is treated as reusable and started with `compose up --no-recreate`, so
 corrected service and health-check configuration silently fails to take effect.
 

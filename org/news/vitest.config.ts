@@ -4,9 +4,7 @@ import { fileURLToPath } from 'node:url';
 //
 // Deliberately self-contained: it extends nothing at the repository root, so
 // this directory stays runnable if it is ever extracted into its own
-// repository. The mocks under test/__mocks__ are this unit's own copies —
-// per CLAUDE.md, duplication across frames is intentional, so that one frame's
-// test requirements never force a change in another frame.
+// repository. The mocks under test/__mocks__ are this unit's own copies.
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
@@ -17,8 +15,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // Only workerd resolves `cloudflare:workers`. `src/lib/cloudflare-env.ts`
-      // is the one importer, so one alias covers the whole unit.
+      // Only workerd resolves `cloudflare:workers`. `src/lib/env.ts` is the one
+      // importer, so one alias covers the whole unit.
       'cloudflare:workers': fileURLToPath(
         new URL('./test/__mocks__/cloudflare-workers.ts', import.meta.url),
       ),
@@ -28,22 +26,17 @@ export default defineConfig({
         new URL('./test/__mocks__/server-only.ts', import.meta.url),
       ),
     },
-    tsconfigPaths: true,
   },
   test: {
     coverage: {
       exclude: [
-        '**/+types/**',
         '**/*.d.ts',
         '**/*.test.{ts,tsx}',
         '**/node_modules/**',
-        '**/build/**',
         '**/dist/**',
         '**/__mocks__/**',
         '**/public/**',
         '**/*.css',
-        '**/*.svg',
-        '**/locales/**',
         '**/coverage/**',
         '**/.wrangler/**',
         '**/e2e/**',
@@ -56,18 +49,20 @@ export default defineConfig({
         // Wiring only: it resolves `@tanstack/react-start/server-entry`, which
         // exists in the Worker build and nowhere else, so no Node test can import
         // it. Its behaviour lives in `src/request-handler.ts` and is covered
-        // there.
-        // `src/router.tsx` is deliberately NOT excluded: the tests drive a real
-        // router through it.
+        // there. `src/router.tsx` is deliberately NOT excluded: the tests drive
+        // a real router through it.
         'src/server.ts',
         // Worker-only ALS install: `node:async_hooks` must not enter the client
         // graph. The default store in `security-nonce.ts` is what Vitest drives.
         'src/security-nonce-als.ts',
       ],
-      include: ['src/**/*.{ts,tsx,js,jsx}'],
+      include: ['src/**/*.{ts,tsx}'],
       provider: 'v8',
       reporter: ['text', 'text-summary'],
+      // A small uncovered file must not hide behind a large covered one.
+      // Vitest 5: per-file floors live on `thresholds`, not CoverageOptions.
       thresholds: {
+        perFile: true,
         branches: 100,
         functions: 100,
         lines: 100,
@@ -81,5 +76,37 @@ export default defineConfig({
     globals: true,
     include: ['test/**/*.test.{ts,tsx}'],
     setupFiles: ['./vitest.setup.ts'],
+    // --- Hardened execution contract -----------------------------------------
+    // Identical across all twenty deployment units and kept inline in each,
+    // never a shared import or root config, so the directory stays independently
+    // runnable and extractable (test/deployment-unit-boundaries.test.ts).
+    // Rationale and the concurrency benchmark: evidence/2026-09-07-vitest-hardening.md.
+    allowOnly: false,
+    passWithNoTests: false,
+    retry: 0,
+    isolate: true,
+    fileParallelism: true,
+    // Bounded because up to four units run at once under the root `pnpm -r`
+    // fan-out (`--workspace-concurrency=4`); workspace concurrency x maxWorkers
+    // is the real worker ceiling (4 x 2 = 8). Vitest 5 dropped `minWorkers`;
+    // `maxWorkers: 2` is the per-unit ceiling.
+    maxWorkers: 2,
+    maxConcurrency: 4,
+    mockReset: true,
+    restoreMocks: true,
+    unstubEnvs: true,
+    unstubGlobals: true,
+    dangerouslyIgnoreUnhandledErrors: false,
+    testTimeout: 10_000,
+    hookTimeout: 10_000,
+    teardownTimeout: 10_000,
+    slowTestThreshold: 300,
+    // Normal runs are deterministic order, non-concurrent. The stress loop
+    // (`pnpm run test:stress`) turns shuffling on from the CLI instead, so an
+    // order-dependency bug surfaces there rather than flaking the fast loop.
+    sequence: {
+      concurrent: false,
+      shuffle: false,
+    },
   },
 });

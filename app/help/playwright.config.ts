@@ -11,7 +11,13 @@ export default defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
     command: 'pnpm run dev',
-    url: 'http://localhost:5408',
+    /*
+     * Wait on `/health`, not `/`. `/` is a 302 to `/ja/` or `/en/`. A stale
+     * Worker can also answer 500 on `/` while `/ja/` still works. `/health` is
+     * the live text/plain probe (200, no Rails hop), which Playwright treats as
+     * ready (2xx).
+     */
+    url: 'http://localhost:5408/health',
     reuseExistingServer: !process.env['CI'],
     timeout: 240_000,
   },

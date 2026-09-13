@@ -56,7 +56,7 @@ function owningUnit(repoRelativePath: string): string | null {
   return units.find((unit) => normalized === unit || normalized.startsWith(`${unit}/`)) ?? null;
 }
 
-const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.astro'];
 
 // `from '...'`, `import '...'`, `import('...')` and `require('...')`, single or
 // double quoted. Only relative specifiers can cross a unit boundary — a bare

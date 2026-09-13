@@ -48,7 +48,7 @@ tool, and using it here would erase the boundary this directory exists to draw.
 
 The reverse also holds: a Vitest file may still invoke a server route or the
 request boundary directly when the thing under test is **not** reachable over
-HTTP — an injected VPC binding that makes Rails time out, a rate limiter that
+HTTP — a stubbed `fetch` that makes Rails time out, a rate limiter that
 refuses, a Workers binding. There the call is the driver and the assertion is
 elsewhere. When the assertion is on the response itself, it belongs here.
 
@@ -88,5 +88,4 @@ count == n` is the assertion that catches a schema change in either direction.
   liveness — and it answers 503 when Rails is absent, which is correct rather
   than broken. `standard-contract.hurl` therefore uses `HTTP *` and asserts the
   shape plus this frame's own half; the branches Rails can drive are unit-tested
-  against an injected VPC binding, the only layer that can produce them on
-  demand.
+  against a stubbed `fetch`, the only layer that can produce them on demand.

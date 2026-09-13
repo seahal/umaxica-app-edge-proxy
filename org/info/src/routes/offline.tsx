@@ -2,20 +2,22 @@ import { createFileRoute } from '@tanstack/react-router';
 
 import { brandTitle } from '../lib/title';
 
+/*
+ * The document the service worker caches at install and serves for a
+ * navigation that cannot reach the network. It must stay an ordinary route so
+ * the service worker has something to cache.
+ *
+ * Locale-less, like the failure documents: it is fetched once, before anyone
+ * knows which language the failed navigation was in, so it speaks the default
+ * locale.
+ */
 export const Route = createFileRoute('/offline')({
-  head: () => ({ meta: [{ title: brandTitle('オフライン') }] }),
+  head: () => ({
+    meta: [{ title: brandTitle('オフライン') }, { name: 'robots', content: 'noindex, nofollow' }],
+  }),
   component: OfflinePage,
 });
 
-/*
- * Rendered inside the root shell, so it carries the skip link the shell places
- * ahead of the header. This `<main>` is that link's target on this document
- * (docs/design/ui-shell-contract.md §12); `tabIndex={-1}` is what makes the
- * browser move focus rather than only scroll.
- *
- * The service worker caches this document at install and serves it for a failed
- * navigation, so it must stay reachable as an ordinary route.
- */
 function OfflinePage() {
   return (
     <main
@@ -27,7 +29,7 @@ function OfflinePage() {
       <p>ネットワーク接続を確認して再読み込みしてください。</p>
       <a
         className="inline-flex min-h-11 items-center justify-self-center rounded-full border border-gray-300 bg-white px-4 py-2 hover:bg-gray-100"
-        href="/"
+        href="/ja/"
       >
         トップへ戻る
       </a>

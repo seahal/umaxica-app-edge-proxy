@@ -15,12 +15,12 @@ import app from '../../src/index';
  */
 describe('security headers on short-circuited requests', () => {
   it('keeps them on a request the error boundary catches', async () => {
-    const isoSpy = vi.spyOn(Date.prototype, 'toISOString').mockImplementation(() => {
+    const isoSpy = vi.spyOn(Date.prototype, 'getUTCFullYear').mockImplementation(() => {
       throw new Error('ISO String error');
     });
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const res = await app.request('/health', {}, {});
+    const res = await app.request('/about', {}, {});
 
     expect(res.status).toBe(500);
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
@@ -29,7 +29,7 @@ describe('security headers on short-circuited requests', () => {
     expect(consoleSpy).toHaveBeenCalledWith('Unhandled apex error', {
       error: 'Error',
       method: 'GET',
-      path: '/health',
+      path: '/about',
     });
 
     isoSpy.mockRestore();

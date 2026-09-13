@@ -13,6 +13,7 @@ const repoRoot = join(import.meta.dirname, '..');
 const read = (relativePath: string) => readFileSync(join(repoRoot, relativePath), 'utf8');
 
 const composeBase = read('compose.yaml');
+const composeDevcontainer = read('.devcontainer/compose.yaml');
 // `compose.override.yaml` is the OPTIONAL developer-local override: gitignored,
 // absent on a fresh clone, never created automatically, and carrying arbitrary
 // host-specific edits where it exists. Only the tracked example can be asserted
@@ -73,12 +74,13 @@ describe('Edge-owned tunnel connector', () => {
     expect(composeOverrideExample).not.toContain('cloudflared');
   });
 
-  it('keeps exactly two compose files, each with a distinct role', () => {
-    // The assertions above are only as complete as this list: everything the
-    // standard environment needs is in `compose.yaml`, and everything
-    // machine-specific goes in the optional `compose.override.yaml` that
-    // `compose.override.yaml.example` documents. A new file must be added here
-    // to be covered, so make the omission fail.
+  it('keeps exactly three compose files, each with a distinct role', () => {
+    // The assertions above are only as complete as this list: the shared
+    // services and the per-unit dev servers are in `compose.yaml`, `core` is in
+    // `.devcontainer/compose.yaml`, and everything machine-specific goes in the
+    // optional `compose.override.yaml` that `compose.override.yaml.example`
+    // documents. A new file must be added here to be covered, so make the
+    // omission fail.
     for (const [name] of composeFiles) {
       expect(existsSync(join(repoRoot, name)), `${name} is asserted on but missing`).toBe(true);
     }
@@ -86,7 +88,11 @@ describe('Edge-owned tunnel connector', () => {
     const trackedCompose = trackedFiles()
       .filter((path) => /(?:^|\/)compose\..*ya?ml(?:\.example)?$/u.test(path))
       .sort();
-    expect(trackedCompose).toEqual(['compose.override.yaml.example', 'compose.yaml']);
+    expect(trackedCompose).toEqual([
+      '.devcontainer/compose.yaml',
+      'compose.override.yaml.example',
+      'compose.yaml',
+    ]);
 
     // Invariant E: the override itself must stay untracked. Committing it would
     // put one developer's host in everyone's checkout, and it would silently
@@ -98,11 +104,22 @@ describe('Edge-owned tunnel connector', () => {
   });
 
   it('defines one hardened connector without a cross-project network', () => {
-    const servicesBlock = /^services:\n((?: .*\n|\n)*)/mu.exec(composeBase)?.[1] ?? '';
-    const serviceNames = [...servicesBlock.matchAll(/^ {2}([a-z0-9][\w-]*):/gmu)].map(
-      (match) => match[1],
-    );
-    expect(serviceNames).toEqual(['core', 'cloudflare-tunnel']);
+    // `core` is the only service in the Dev Container's file, and the connector is
+    // the only service in `compose.yaml` without a profile -- the twenty dev
+    // servers all sit behind `profiles: [app]`, so a bare `podman compose up`
+    // starts the connector and nothing else.
+    const namesIn = (text: string): string[] => {
+      const block = /^services:\n((?: .*\n|\n)*)/mu.exec(text)?.[1] ?? '';
+      return [...block.matchAll(/^ {2}([a-z0-9][\w-]*):/gmu)].map((match) => match[1] as string);
+    };
+    expect(namesIn(composeDevcontainer)).toEqual(['core']);
+
+    const alwaysStarted = namesIn(composeBase).filter((name) => {
+      const body =
+        new RegExp(`^ {2}${name}:\n((?: {4}.*\n|\n)*)`, 'mu').exec(composeBase)?.[1] ?? '';
+      return !body.includes('<<: *unit') && !body.includes('profiles:');
+    });
+    expect(alwaysStarted).toEqual(['cloudflare-tunnel']);
 
     const connector = /^ {2}cloudflare-tunnel:\n((?: {4}.*\n|\n)*)/mu.exec(composeBase)?.[1] ?? '';
     expect(connector).not.toBe('');
@@ -115,9 +132,10 @@ describe('Edge-owned tunnel connector', () => {
   });
 
   it('starts the connector with the standard devcontainer lifecycle', () => {
-    // Invariant B: exactly one compose file, the tracked one, so the Dev
+    // Invariant B: exactly two compose files, both tracked, so the Dev
     // Container configuration resolves on a fresh clone with no local file
-    // creation. The Dev Containers CLI passes every entry to Compose as `-f`,
+    // creation. `core` is defined in the second one, which is what keeps it out
+    // of a bare `podman compose up`. The Dev Containers CLI passes every entry to Compose as `-f`,
     // so any entry that a clone does not contain fails the whole `up` with a
     // bare `no such file or directory` — which is how Codespaces used to break
     // on the retired developer-local overlay.
@@ -126,7 +144,7 @@ describe('Edge-owned tunnel connector', () => {
     // here; the optional override reaches only `scripts/dev-start` and a bare
     // `docker compose`. `compose-local-override-invariants.test.ts` proves every
     // listed entry is a tracked file.
-    expect(devcontainer).toContain('"dockerComposeFile": ["../compose.yaml"]');
+    expect(devcontainer).toContain('"dockerComposeFile": ["../compose.yaml", "./compose.yaml"]');
     // Compose takes the project name from the last file that sets one, so a
     // divergent `name:` in an override forks the project away from
     // `compose.yaml` and `scripts/dev-start` — a second volume set, and a port
@@ -137,26 +155,55 @@ describe('Edge-owned tunnel connector', () => {
   });
 
   /*
-   * The Edge-specific token is still what the connector prefers; the generic
-   * CLOUDFLARED_TOKEN is accepted as a fallback, for a local setup that runs a
-   * single tunnel and has no separate Edge value.
-   *
-   * Neither may carry a `:?` guard any more. Compose interpolates the whole file
-   * whichever services are named, so now that the connector shares `compose.yaml`
-   * with `core`, a required variable would stop `podman compose up core` on every
-   * machine that never runs a tunnel. `scripts/dev-start --tunnel` is where the
-   * requirement is enforced instead, and it has to look in `.env` as well as in
-   * the shell, because compose reads that file and bash does not.
+   * The tunnel token is exactly one variable with no fallback chain. Global uses
+   * the same variable name in its own `.env`, which is fine — each Compose
+   * project reads the file beside its own compose file, so one name holds two
+   * different tunnels. What broke on 2026-09-04 was the fallback
+   * `${EDGE_CLOUDFLARED_TOKEN:-${CLOUDFLARED_TOKEN:-}}`: on a machine carrying
+   * only Global's value it silently made this connector a replica of Global's
+   * tunnel from a network with no route to Rails — indistinguishable to
+   * Cloudflare from a healthy replica, and broken for both repositories. Any
+   * `:-` chain between two credential variables can do that again, so none may
+   * appear here. See ADR 014.
    */
-  it('prefers the Edge-specific token and refuses to start a tunnel without one', () => {
-    expect(composeBase).toMatch(
-      /TUNNEL_TOKEN: ['"]\$\{EDGE_CLOUDFLARED_TOKEN:-\$\{CLOUDFLARED_TOKEN:-\}\}['"]/u,
-    );
+  it('reads the tunnel token from exactly one variable, with no fallback chain', () => {
+    expect(composeBase).toMatch(/TUNNEL_TOKEN: ['"]\$\{CLOUDFLARED_TOKEN:-\}['"]/u);
+    // A second `${` inside the TUNNEL_TOKEN value is a fallback chain.
+    expect(composeBase).not.toMatch(/TUNNEL_TOKEN:[^\n]*\$\{[^}]*\$\{/u);
+  });
+
+  /*
+   * The token may still not carry a `:?` guard. Compose interpolates the whole
+   * file whichever services are named, so now that the connector shares
+   * `compose.yaml` with `core`, a required variable would stop `podman compose up
+   * core` on every machine that never runs a tunnel. `scripts/dev-start --tunnel`
+   * is where the requirement is enforced instead, and it has to look in `.env` as
+   * well as in the shell, because compose reads that file and bash does not.
+   */
+  it('refuses to start a tunnel without a token', () => {
     expect(composeBase).not.toMatch(/CLOUDFLARED_TOKEN:\?/u);
 
     const devStart = read('scripts/dev-start');
-    expect(devStart).toMatch(/--tunnel requires EDGE_CLOUDFLARED_TOKEN/u);
-    expect(devStart).toContain("grep -Eq '^(EDGE_)?CLOUDFLARED_TOKEN=.+' .env");
+    expect(devStart).toMatch(/--tunnel requires CLOUDFLARED_TOKEN/u);
+    expect(devStart).toContain("sed -n 's/^CLOUDFLARED_TOKEN=//p' .env");
+  });
+
+  /*
+   * Sharing the variable name with Global means the name itself can no longer
+   * catch a copied value, so `dev-start --tunnel` decodes the tunnel UUID from
+   * the token and compares it against the connectors already running on this
+   * host. That comparison is now the only thing standing between a pasted `.env`
+   * and a repeat of 2026-09-04.
+   */
+  it('refuses to add a second connector to a tunnel that already has one', () => {
+    const devStart = read('scripts/dev-start');
+    expect(devStart).toMatch(/tunnel_uuid_of\(\)/u);
+    expect(devStart).toMatch(/already has a connector on this host/u);
+    // Every cloudflared container on the host counts, not only this compose
+    // project's own.
+    expect(devStart).toMatch(
+      /podman ps --format '\{\{\.Names\}\}'[^\n]*\n?[^\n]*grep -i cloudflare/u,
+    );
   });
 });
 
@@ -241,9 +288,18 @@ describe('secret hygiene', () => {
        * the equivalent for a Vite frame, denied in the client environment by the
        * Start plugin. Either satisfies the invariant; neither is optional.
        */
-      expect(source, `${client} must be server-only`).toMatch(
-        /import '(?:server-only|@tanstack\/react-start\/server-only)'/u,
+      const isAstro = existsSync(
+        join(repoRoot, client.replace(/src\/lib\/rails-client\.ts$/u, 'astro.config.mjs')),
       );
+      if (isAstro) {
+        expect(source, `${client} must not import a Start/Next server-only marker`).not.toMatch(
+          /import '(?:server-only|@tanstack\/react-start\/server-only)'/u,
+        );
+      } else {
+        expect(source, `${client} must be server-only`).toMatch(
+          /import '(?:server-only|@tanstack\/react-start\/server-only)'/u,
+        );
+      }
 
       for (const header of [
         'cookie',
@@ -254,11 +310,22 @@ describe('secret hygiene', () => {
         expect(source, `${client} must strip ${header}`).toContain(`'${header}'`);
       }
 
+      const stripIndex = source.indexOf('FORBIDDEN_REQUEST_HEADERS) {');
+      expect(stripIndex, `${client} lost the header strip`).toBeGreaterThan(-1);
+
+      if (!isAstro) {
+        // The Cores reach Rails over the public internet with no transport
+        // credential at all (adr/018-core-rails-direct-internet.md), so there is
+        // nothing to apply after the strip — and nothing may be added back.
+        expect(source, `${client} must apply no transport credentials`).not.toContain(
+          'authHeaders',
+        );
+        continue;
+      }
+
       // The strip must precede the transport's own headers, otherwise a caller
       // could override the service token — or keep their own.
-      const stripIndex = source.indexOf('FORBIDDEN_REQUEST_HEADERS) {');
       const applyIndex = source.indexOf('Object.entries(authHeaders)');
-      expect(stripIndex, `${client} lost the header strip`).toBeGreaterThan(-1);
       expect(applyIndex, `${client} lost the auth application`).toBeGreaterThan(-1);
       expect(applyIndex, `${client} applies credentials before stripping`).toBeGreaterThan(
         stripIndex,

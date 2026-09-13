@@ -4,8 +4,7 @@ import { CANONICAL_ORIGIN } from '../lib/canonical';
 
 /*
  * An ordinary server route. TanStack has no metadata-file convention, so the
- * body is written out here and the `Content-Type` is stated explicitly, because
- * nothing else will infer it.
+ * body is written out here and the `Content-Type` is stated explicitly.
  */
 export const Route = createFileRoute('/robots.txt')({
   server: {

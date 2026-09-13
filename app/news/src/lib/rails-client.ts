@@ -1,32 +1,28 @@
 import '@tanstack/react-start/server-only';
 import { readBoundedText } from './bounded-text';
-import { getEdgeEnv } from './cloudflare-env';
+import type { EdgeBindings } from './env';
+import { PRIVATE_RAILS_ORIGIN } from './publishing-cell';
+
+/*
+ * The private Worker → Rails transport for this public content unit.
+ *
+ * Server-only: `@tanstack/react-start/server-only` makes the build fail if a
+ * client bundle ever reaches this module, so the private origin and the VPC
+ * binding cannot leak into the browser.
+ *
+ * Everything the invariant suite pins is here: the credential strip, the
+ * relative-path validation, `redirect: 'manual'` (a Rails redirect is an
+ * upstream error, never followed), `cache: 'no-store'`, the 5 s timeout, and
+ * the `ProxyError` → `unreachable` classification.
+ *
+ * The origin is this cell's `PRIVATE_RAILS_ORIGIN` (`src/lib/publishing-cell.ts`).
+ */
 
 const RAILS_FETCH_TIMEOUT_MS = 5000;
 
-// The Rails entry point for this frame.
-//
-// Workers VPC does NOT route on this host. The VPC Service decides where the
-// connection goes — one Service, one tunnel, for all fifteen frames — and this
-// URL only populates the `Host` header: "The host provided in the fetch()
-// operation is not used to route requests, and instead only populates the Host
-// field" (Cloudflare, Workers VPC / VPC Services).
-//
-// Rails dispatches on that header to `<Frame>::<Brand>::…`. Measured 2026-08-10
-// against one VPC Service: `docs.app.localhost` answered from
-// `Docs::App::Health::LivenessesController`, `core.com.localhost` from
-// `Core::Com::…`. So fifteen frames reach fifteen entry points with no extra
-// Cloudflare resources.
-//
-// This is therefore NOT a label — editing it changes which Rails namespace
-// answers. `test/rails-connection-invariants.test.ts` pins the mapping.
-const PRIVATE_RAILS_ORIGIN = 'http://news.app.localhost:3000';
-
-// Stripped from every outbound request, always, on both transports. This is
-// about never RELAYING a caller's credentials to Rails — a browser session
-// cookie or an inbound Access token must not become a Rails-side identity.
-// The dev transport's own service token is applied afterwards, so a caller
-// cannot smuggle one in through `init.headers`.
+// Stripped from every outbound request, always. Never relay a caller's
+// credentials to Rails — a browser session cookie or an inbound Access token
+// must not become a Rails-side identity.
 const FORBIDDEN_REQUEST_HEADERS = [
   'cookie',
   'authorization',
@@ -43,6 +39,7 @@ export type RailsClientInit = Pick<RequestInit, 'method' | 'headers' | 'body'>;
 export type RailsClientResult =
   | { kind: 'ok'; status: number; response: Response }
   | { kind: 'http-error'; status: number; response: Response }
+  | { kind: 'timeout' }
   | { kind: 'unreachable'; errorMessage: string }
   | { kind: 'invalid-path'; reason: string };
 
@@ -50,22 +47,17 @@ export interface RailsClient {
   fetch(path: string, init?: RailsClientInit): Promise<RailsClientResult>;
 }
 
-// Read one variable at a time rather than asserting the whole of `process.env`
-// into a shape it does not have. The Wrangler-generated `NodeJS.ProcessEnv`
-// declares only the three bindings from wrangler.jsonc, so these two names are
-// not on it at all — which is what the old
-// `process.env as unknown as RailsLocalNodeEnv` was hiding, the one
-// double-assertion left in this repository's source.
 function readLocalFlag(name: string): string | undefined {
-  const value: unknown = Reflect.get(process.env, name);
+  const processEnv: unknown = typeof process === 'undefined' ? undefined : process.env;
+  if (typeof processEnv !== 'object' || processEnv === null) {
+    return undefined;
+  }
+  const value: unknown = Reflect.get(processEnv, name);
   return typeof value === 'string' ? value : undefined;
 }
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
+  return error instanceof Error ? error.message : String(error);
 }
 
 function hasControlCharacter(path: string): boolean {
@@ -100,19 +92,12 @@ function validateRelativePath(path: string): string | null {
   return null;
 }
 
-// Long enough for `ProxyError: <code>`, short enough that a real Rails error
-// page is never pulled into memory just to be rejected — a bound
-// `readBoundedText` now actually enforces, rather than one applied after the
-// whole body was already read.
 const PROXY_ERROR_MAX_CHARS = 200;
 
 /**
  * The `ProxyError: <code>` that Workers VPC returns when it cannot reach the
- * private origin, or null for any other response.
- *
- * Deliberately narrow: only a 500 with a `text/plain` body is even inspected,
- * and the body is read from a clone so the caller still receives an unconsumed
- * response on every path this does not claim.
+ * private origin, or null for any other response. Only a 500 with a `text/plain`
+ * body is inspected, and the body is read from a clone.
  */
 async function readProxyError(response: Response): Promise<string | null> {
   if (response.status !== 500) {
@@ -126,32 +111,19 @@ async function readProxyError(response: Response): Promise<string | null> {
     const body = await readBoundedText(response.clone(), PROXY_ERROR_MAX_CHARS);
     return /^ProxyError:\s*\w+/iu.test(body) ? body : null;
   } catch {
-    // A body that cannot be read is not evidence of anything; leave the
-    // response to be reported as the http-error it appears to be.
     return null;
   }
 }
 
-function buildSanitizedHeaders(
-  init: RailsClientInit | undefined,
-  authHeaders: Readonly<Record<string, string>>,
-): Headers {
+function buildSanitizedHeaders(init: RailsClientInit | undefined): Headers {
   const headers = new Headers(init?.headers);
   for (const forbidden of FORBIDDEN_REQUEST_HEADERS) {
     headers.delete(forbidden);
   }
-  // Applied after the strip, so the transport's own credentials always win.
-  for (const [name, value] of Object.entries(authHeaders)) {
-    headers.set(name, value);
-  }
   return headers;
 }
 
-export function createRailsClient(
-  fetcher: RailsFetcher,
-  origin: string,
-  authHeaders: Readonly<Record<string, string>> = {},
-): RailsClient {
+export function createRailsClient(fetcher: RailsFetcher, origin: string): RailsClient {
   return {
     async fetch(path, init) {
       const validationError = validateRelativePath(path);
@@ -168,26 +140,13 @@ export function createRailsClient(
         const response = await fetcher.fetch(url.toString(), {
           ...(init?.method === undefined ? {} : { method: init.method }),
           ...(init?.body === undefined ? {} : { body: init.body }),
-          headers: buildSanitizedHeaders(init, authHeaders),
+          headers: buildSanitizedHeaders(init),
           redirect: 'manual',
           cache: 'no-store',
           signal: AbortSignal.timeout(RAILS_FETCH_TIMEOUT_MS),
         });
 
         if (!response.ok) {
-          // Workers VPC does not throw when the private origin is unreachable.
-          // It answers with an ordinary HTTP 500 whose body carries the
-          // documented code:
-          //
-          //   500  text/plain  "ProxyError: connection_refused"
-          //
-          // Measured 2026-08-09 by stopping Rails. Reporting that as
-          // `http-error` makes a stopped Rails indistinguishable from a Rails
-          // that returned 500 from its own code — the status is honest and the
-          // cause is not. `unreachable` is what actually happened: nothing
-          // reached Rails. The code is kept in `errorMessage` so the specific
-          // failure (connection_refused vs dns_error vs
-          // tls_certificate_error) is not lost in the rounding.
           const proxyError = await readProxyError(response);
           if (proxyError) {
             return { kind: 'unreachable', errorMessage: proxyError };
@@ -197,6 +156,9 @@ export function createRailsClient(
 
         return { kind: 'ok', status: response.status, response };
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          return { kind: 'timeout' };
+        }
         return { kind: 'unreachable', errorMessage: getErrorMessage(error) };
       }
     },
@@ -204,42 +166,18 @@ export function createRailsClient(
 }
 
 /**
- * Two mutually exclusive transports, selected by an actual runtime capability.
+ * Two mutually exclusive transports, selected by an actual runtime capability:
  *
- * 1. Local Node dev  → direct private Podman network, with no Access token.
- * 2. VPC binding     → Workers/workerd. Cloudflare grants the real binding.
- * 3. Neither         → null, reported as `not-configured`. Fail closed.
+ * 1. Local dev (`EDGE_LOCAL_NODE_RUNTIME=1` and `EDGE_LOCAL_RAILS_ENABLED=1`)
+ *    → direct private network, no Access token.
+ * 2. VPC binding → workerd. Cloudflare grants the real binding.
+ * 3. Neither → null, reported as `not-configured`. Fail closed.
  *
- * **The local check runs first, and the order is load-bearing.**
- *
- * A Workers VPC binding has no local simulation. Wrangler still materialises it
- * whenever a configuration declares it, as a stub that throws on use:
- *
- *   Binding UMAXICA_APPS_EDGE_CF_WORKERS_VPC needs to be run remotely
- *
- * so a configuration that declares the binding without `remote: true` leaves it
- * *truthy but non-functional*. Testing it first — as this function used to —
- * would make every local Rails call report `unreachable` and make the direct
- * transport below dead code. Nothing else fails to say so.
- *
- * The `local` wrangler environment declares no `vpc_services` at all, so
- * `pnpm dev` needs no `wrangler login`; `pnpm dev:vpc` selects the `vpc`
- * environment, where the binding is real and `remote: true`.
- *
- * The direct transport now runs inside workerd rather than Node, which is the
- * one thing this migration changed here. Measured 2026-08-22: workerd reaches
- * `http://news.app.localhost:<port>` with `global_fetch_strictly_public` in
- * `compatibility_flags`, so the flag stays on in every environment.
- *
- * `EDGE_LOCAL_NODE_RUNTIME` is set only by the `dev` scripts, so the preview and
- * the deployed Worker never take this branch and reach the real binding exactly
- * as before. Requiring `EDGE_LOCAL_RAILS_ENABLED` as well matters because the
- * Rails overlay is container-wide: without it, local dev fails closed to
- * `not-configured` rather than borrowing a transport it was not granted.
- *
- * This is still a branch on runtime *capability*, never on an environment name.
+ * The local check runs first — a Workers VPC binding has no local simulator and
+ * is truthy-but-throwing without `remote: true`, so testing it first would make
+ * the direct transport dead code.
  */
-export function getRailsClient(): RailsClient | null {
+export function getRailsClient(env: EdgeBindings): RailsClient | null {
   const isLocalNodeRuntime = readLocalFlag('EDGE_LOCAL_NODE_RUNTIME') === '1';
 
   if (isLocalNodeRuntime) {
@@ -249,7 +187,7 @@ export function getRailsClient(): RailsClient | null {
     return null;
   }
 
-  const binding = getEdgeEnv().UMAXICA_APPS_EDGE_CF_WORKERS_VPC;
+  const binding = env.UMAXICA_APPS_EDGE_CF_WORKERS_VPC;
   if (binding) {
     return createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
   }

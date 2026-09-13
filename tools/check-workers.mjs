@@ -472,8 +472,28 @@ for (const ws of manifest.railsBacked) {
 for (const ws of manifest.railsBackedVite ?? []) {
   const config = loadWrangler(ws);
   if (!config) continue;
-  // `local` is the extra tier: vite dev runs the Worker in workerd, so the
-  // everyday loop needs an environment that declares no VPC Service.
+  // `local` is the extra tier: vite dev runs the Worker in workerd, and it is
+  // the tier whose `RAILS_ORIGIN` points at the development container's Rails.
+  checkEnvironments(ws, config, ['local', 'development', 'test']);
+  checkViteWorker(ws, config);
+  checkPublicAssets(ws);
+
+  // The Cores reach Rails over the public internet at `RAILS_ORIGIN`, not over
+  // Workers VPC — adr/018-core-rails-direct-internet.md.
+  if (vpcBindings(config).length > 0) {
+    fail(
+      ws,
+      'railsBackedVite workers must not declare vpc_services — they reach Rails at RAILS_ORIGIN',
+    );
+  }
+}
+
+// The twelve public content cells: the same Vite + TanStack Start Worker shape as
+// the Cores (checkViteWorker), but Rails is reached over the Workers VPC binding,
+// so they carry the VPC policy and a `vpc` tier. adr/019.
+for (const ws of manifest.railsBackedVpcVite ?? []) {
+  const config = loadWrangler(ws);
+  if (!config) continue;
   checkEnvironments(ws, config, ['local', 'development', 'vpc', 'test']);
   checkViteWorker(ws, config);
   checkPublicAssets(ws);
@@ -489,6 +509,7 @@ for (const ws of manifest.railsBackedVite ?? []) {
 for (const ws of [
   ...manifest.railsBacked,
   ...(manifest.railsBackedVite ?? []),
+  ...(manifest.railsBackedVpcVite ?? []),
   ...manifest.contentSurface,
 ]) {
   const pkgPath = join(root, ws, 'package.json');
@@ -613,6 +634,7 @@ for (const ws of manifest.standalone) {
   for (const ws of [
     ...manifest.railsBacked,
     ...(manifest.railsBackedVite ?? []),
+    ...(manifest.railsBackedVpcVite ?? []),
     ...manifest.contentSurface,
     ...manifest.standalone,
   ]) {
@@ -649,6 +671,7 @@ if (failures.length > 0) {
 const checked =
   manifest.railsBacked.length +
   (manifest.railsBackedVite ?? []).length +
+  (manifest.railsBackedVpcVite ?? []).length +
   manifest.contentSurface.length +
   manifest.standalone.length;
 process.stdout.write(`check-workers: OK (${checked} workers validated)\n`);

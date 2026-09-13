@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+runtime_directory=${XDG_RUNTIME_DIR:-/tmp}
+lock_file=${runtime_directory}/devcontainers-feature-content.lock
+
+if ! command -v flock >/dev/null 2>&1; then
+  echo 'ERROR: flock is required to serialize Dev Container Feature builds.' >&2
+  exit 1
+fi
+
+# @devcontainers/cli 0.89.0 gives the fallback Feature-content image the fixed
+# name `dev_container_feature_content_temp`. Podman stores that tag globally for
+# the rootless user, so concurrent builds from otherwise unrelated repositories
+# can replace it between the Feature-content build and the consuming COPY.
+#
+# The lock name is deliberately repository-independent. Other Dev Container
+# launchers on this host must use the same lock while running `devcontainer up`.
+exec 9>"${lock_file}"
+if ! flock --nonblock 9; then
+  echo 'Another Dev Container build is using the shared Feature-content image; waiting for it.' >&2
+  flock 9
+fi
+
+export PODMAN_COMPOSE_PROVIDER=/usr/bin/podman-compose
+exec devcontainer up \
+  --docker-path /usr/bin/podman \
+  --docker-compose-path /usr/bin/podman-compose \
+  --workspace-folder "${repository_root}" \
+  "$@"

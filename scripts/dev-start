@@ -39,11 +39,12 @@ if ((${#unmasked_env_files[@]} > 0)); then
   exit 1
 fi
 
-# The local override is optional by contract. `compose.yaml` alone is the
-# complete standard environment -- it carries the SELinux `label=disable` and
-# the `GH_TOKEN` passthrough that used to live in the overlay -- so a fresh
-# clone starts here, and `.devcontainer/devcontainer.json` loads only
-# `compose.yaml` for the same reason.
+# The local override is optional by contract. `compose.yaml` plus
+# `.devcontainer/compose.yaml` are the complete standard environment -- between
+# them they carry the SELinux `label=disable` and the `GH_TOKEN` passthrough that
+# used to live in the overlay -- so a fresh clone starts here, and
+# `.devcontainer/devcontainer.json` loads exactly those two files for the same
+# reason.
 #
 # `compose.override.yaml` is gitignored and never created automatically. Load
 # it when it happens to exist, so this script and a bare `docker compose`
@@ -59,7 +60,12 @@ if [[ -e compose.custom.yaml && ! -e compose.override.yaml ]]; then
   echo '  mv compose.custom.yaml compose.override.yaml   # then drop label=disable/GH_TOKEN from it' >&2
 fi
 
-compose=(podman compose -f compose.yaml)
+# `core` is defined in `.devcontainer/compose.yaml`, not in `compose.yaml`: that
+# split is what lets a bare `podman compose up` bring up the shared services
+# without a workspace container nobody asked for. This script wants `core`, so it
+# names both files. Both declare the same project name, so this is still the one
+# project the Dev Container and a bare `podman compose` address.
+compose=(podman compose -f compose.yaml -f .devcontainer/compose.yaml)
 if [[ -e compose.override.yaml ]]; then
   compose+=(-f compose.override.yaml)
 fi
@@ -111,19 +117,72 @@ if [[ ${use_rails} == true ]]; then
   fi
 fi
 
+# A remotely managed connector token is base64-encoded JSON whose `t` field is the
+# tunnel UUID. Decoding it needs no credential and reveals nothing secret: the UUID
+# is the tunnel's dashboard identifier. Printing anything else from the token is
+# not acceptable. Cloudflare's tokens carry no `=` padding, so restore it before
+# decoding; `base64 -d` rejects an unpadded string.
+tunnel_uuid_of() {
+  local token=${1-} padded
+  [[ -z ${token} ]] && return 1
+  padded=${token}
+  while ((${#padded} % 4)); do padded+='='; done
+  printf '%s' "${padded}" | base64 -d 2>/dev/null |
+    grep -oE '"t"[[:space:]]*:[[:space:]]*"[0-9a-fA-F-]+"' |
+    head -n 1 |
+    grep -oE '[0-9a-fA-F-]{36}'
+}
+
 # Independent of --rails on purpose: inbound Edge exposure and outbound Rails
 # connectivity answer different questions. The connector is defined in
 # `compose.yaml` because it is shared, so this adds no overlay — it only asks for
 # the service to be started. It uses this compose project's default network and
-# requires an Edge-specific token from `.env`.
+# requires this repository's own tunnel token from `.env`.
 if [[ ${use_tunnel} == true ]]; then
-  # Compose reads the repo-root `.env` itself; bash does not. Check both, or a
-  # token that is present and working would be reported as missing.
-  if [[ -z ${EDGE_CLOUDFLARED_TOKEN:-} && -z ${CLOUDFLARED_TOKEN:-} ]] &&
-    ! { [[ -f .env ]] && grep -Eq '^(EDGE_)?CLOUDFLARED_TOKEN=.+' .env; }; then
-    echo 'ERROR: --tunnel requires EDGE_CLOUDFLARED_TOKEN (or CLOUDFLARED_TOKEN) in .env.' >&2
+  # Compose reads the repo-root `.env` itself; bash does not. Check the
+  # environment and the file, or a token that is present and working would be
+  # reported as missing.
+  edge_token=${CLOUDFLARED_TOKEN:-}
+  if [[ -z ${edge_token} && -f .env ]]; then
+    edge_token=$(sed -n 's/^CLOUDFLARED_TOKEN=//p' .env | tail -n 1)
+    edge_token=${edge_token%\"}
+    edge_token=${edge_token#\"}
+    edge_token=${edge_token%\'}
+    edge_token=${edge_token#\'}
+  fi
+  if [[ -z ${edge_token} ]]; then
+    echo 'ERROR: --tunnel requires CLOUDFLARED_TOKEN in .env.' >&2
+    echo "  It must be this repository's OWN tunnel token. Global uses the same" >&2
+    echo '  variable name in its own .env, for a different tunnel.' >&2
     exit 1
   fi
+
+  # The variable name is shared with Global by design (one name, one tunnel per
+  # repository, each from its own `.env`), so the name cannot catch a copied
+  # value. This does: two connectors on one tunnel is the 2026-09-04 failure, and
+  # Cloudflare cannot detect it — a replica that cannot reach the origin looks
+  # healthy from the edge. Compare the tunnel UUID instead, against every
+  # cloudflared container already on this host.
+  edge_uuid=$(tunnel_uuid_of "${edge_token}" || true)
+  if [[ -z ${edge_uuid} ]]; then
+    echo 'ERROR: CLOUDFLARED_TOKEN is not a decodable connector token.' >&2
+    echo '  Expected the base64 token from the tunnel dashboard, not a tunnel name,' >&2
+    echo '  UUID, or Cloudflare API token.' >&2
+    exit 1
+  fi
+  while read -r other; do
+    [[ -z ${other} ]] && continue
+    other_token=$(podman inspect "${other}" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null |
+      sed -n 's/^TUNNEL_TOKEN=//p' | head -n 1)
+    [[ $(tunnel_uuid_of "${other_token}" || true) == "${edge_uuid}" ]] || continue
+    echo "ERROR: tunnel ${edge_uuid} already has a connector on this host: ${other}" >&2
+    echo '  Two connectors on one tunnel is not a valid setup here. Cloudflare routes' >&2
+    echo '  to the nearest replica and cannot tell that one of them has no route to' >&2
+    echo '  its origin, so both repositories fail intermittently. Give this' >&2
+    echo '  repository its own tunnel and put that tunnel token in .env.' >&2
+    exit 1
+  done < <(podman ps --format '{{.Names}}' 2>/dev/null | grep -i cloudflare || true)
+
   services+=(cloudflare-tunnel)
 fi
 

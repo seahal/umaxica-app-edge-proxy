@@ -1,6 +1,6 @@
 # ADR 015: The twelve public content surfaces run Astro, partially superseding ADR 013
 
-## Status: Accepted 2026-09-02 — implementation in progress, NOT deployed
+## Status: Accepted 2026-09-02 — framework cutover is in tree. Publishing pages (2026-09-10): Rails-backed Astro SSR over Workers VPC is in all twelve units. Collection pagination (2026-09-10): public `?page=N` is forwarded to Rails Pagy as `GET /api/v0/entries?locale={lang}&page=N`. The earlier cursor/`next_cursor`/`has_more` publishing collection contract is superseded for these surfaces. Remaining work: `plans/astro-content-surfaces-remaining.md` (Content Collections, ETag/304, three-stream sitemap, Phase 2 cache).
 
 `{app,com,org}/{docs,help,info,news}` — twelve deployment units — move from
 TanStack Start to **Astro on Cloudflare Workers**, `output: 'static'` with a
@@ -38,10 +38,13 @@ Two requirements landed that the current stack has no first-class answer for:
   into Rails as durable authority and be composed into the **first HTML** at
   request time — not lazy-fetched after load. Astro's SSR + Content Collections
   are built for exactly this shape; TanStack Router is not.
-- **`region × language` URLs.** `jp`/`us` region and `ja`/`en` language, where
-  today there is `defaultLocale = 'ja'` and nothing else. This is new routing,
-  and Astro owns `locale routing`, `region routing`, `<html lang>`, `canonical`,
-  `alternate`, `hreflang` as framework concerns.
+- **Language in the URL, region not.** Astro's locale routing needs a real
+  `ja` / `en` prefix (`prefixDefaultLocale: true`). That is a **deliberate
+  change** from the old unprefixed `defaultLocale = 'ja'` pages: content URLs
+  are `/ja/…` and `/en/…`. Region (`jp` / `us`) is **not** a path segment —
+  there is no `/jp/` — it is a build-time `PUBLIC_REGION` that selects the
+  canonical origin (`docs-jp` vs `docs-us`). Astro owns `<html lang>`,
+  canonical, `alternate`, `hreflang`; it does not own a region router.
 
 `adr/004` was rejected because (a) `/health`'s private-VPC probe did not fit its
 "public read-only APIs only" rule, and (b) "splitting three of the five roles
@@ -55,11 +58,11 @@ benefits are measured below.
 
 ### Framework and responsibility split
 
-| Layer                  | Units                                      | Framework      | Responsibility                                                      |
-| ---------------------- | ------------------------------------------ | -------------- | ------------------------------------------------------------------- |
-| Public content surface | `{app,com,org}/{docs,help,info,news}` (12) | **Astro**      | routing, presentation, SSR, HTML generation, SEO, locale/region URL |
-| Application core       | `{app,com,org}/core` (3)                   | TanStack Start | RP/BFF, authenticated UI, session material                          |
-| Apex                   | `{app,com,net,org,dev}/apex` (5)           | Hono           | edge middleware, redirects, `/about`, `/health`                     |
+| Layer                  | Units                                      | Framework      | Responsibility                                                                |
+| ---------------------- | ------------------------------------------ | -------------- | ----------------------------------------------------------------------------- |
+| Public content surface | `{app,com,org}/{docs,help,info,news}` (12) | **Astro**      | routing, presentation, SSR, HTML generation, SEO, locale URL (`/ja/`, `/en/`) |
+| Application core       | `{app,com,org}/core` (3)                   | TanStack Start | RP/BFF, authenticated UI, session material                                    |
+| Apex                   | `{app,com,net,org,dev}/apex` (5)           | Hono           | edge middleware, redirects, `/about`, `/health`                               |
 
 - **Rails** = durable content authority, policy, public read API.
 - **Astro** = compile-time + request-time presentation. **Not** an RP/BFF. A
@@ -96,21 +99,30 @@ failure**. Markdown (`render()`) and Rails JSON (a mapper) both feed **one**
 `DocumentShell` / `DocumentLayout` — no double UI. MDX is not adopted until a
 Markdown body actually needs component execution.
 
-### i18n / region
+### i18n / region — explicit change from a path-shaped `region × language` URL
 
-- **Language** = URL path prefix (`/ja/…`, `/en/…`), both prefixed, no
-  unprefixed default. `<html lang>` always equals the routed locale (unlike the
-  apex units — `adr/011`).
-- **Region** = a build-time input (`PUBLIC_REGION` ∈ `jp|us`), selecting the
-  canonical origin. One build per region. The ops choice between one Worker on
-  two custom domains and two deployments is deferred.
-- `alternate` / `hreflang` list only locales/regions that **actually exist** for
-  a document (from the Markdown file tree, or from the Rails representation's
-  locale/region field). `x-default` → `ja`. `/` performs `Accept-Language`
-  negotiation and `302`s to `/ja/` or `/en/`.
+An earlier grill-me draft treated region as a routing concern next to language
+(`locale routing` and `region routing` in the same URL). **That is rejected.**
+The two axes are different kinds of input, and mixing them in the path
+(`/jp/ja/…`) is not how these hosts work today (`docs-jp.umaxica.app` vs
+`docs-us.umaxica.app`).
+
+- **Language (`ja` / `en`) is in the URL.** Astro i18n requires a locale
+  prefix; both locales are prefixed (`prefixDefaultLocale: true`) and there is
+  no unprefixed default page. This is the one URL change we accept because the
+  framework needs it: `/ja/…`, `/en/…`. `<html lang>` always equals the routed
+  locale (unlike the apex units — `adr/011`). `/` negotiates `Accept-Language`
+  and `302`s to `/ja/` or `/en/`. `x-default` → `ja`.
+- **Region (`jp` / `us`) is not in the URL.** No `/jp/` segment. Region is a
+  build-time `PUBLIC_REGION` that selects the canonical origin. One build per
+  region. The ops choice between one Worker on two custom domains and two
+  deployments is deferred.
+- `alternate` / `hreflang` list only **language** variants that actually exist
+  for a document. Cross-region alternates, if they appear, are absolute URLs on
+  the other region's origin — not a path prefix on this host.
 - The absolute canonical URL is decided by **Astro**, not Rails: Astro knows the
-  TLD, locale, region and routing. Internal VPC / localhost / service-binding
-  URLs never appear in metadata.
+  TLD, locale, region (via `PUBLIC_REGION`) and routing. Internal VPC /
+  localhost / service-binding URLs never appear in metadata.
 - i18n config is owned per unit; no cross-unit runtime import.
 
 ### HTTP status semantics (CMS-grade)
@@ -172,11 +184,9 @@ prepare a search-island UI boundary but must not proxy search through SSR.
    layer; Rails document routes and `/health`, `/`, `/revision` are
    `export const prerender = false`. `output: 'server'` would push every Markdown
    page through a Worker invocation for nothing.
-2. **The Astro Cloudflare adapter reads `wrangler.jsonc`.** While a unit still
-   carries the TanStack `wrangler.jsonc` (`main: ./src/server.ts`), the adapter
-   is pointed at a separate `wrangler.astro.jsonc` via `configPath` — otherwise
-   it tries to bundle `src/server.ts` and fails on `#tanstack-start-entry`. At
-   cutover, `wrangler.astro.jsonc` becomes the unit's `wrangler.jsonc`.
+2. **The Astro Cloudflare adapter reads `wrangler.jsonc`.** The TanStack
+   `main: ./src/server.ts` config is gone; this file is the unit's only Wrangler
+   input. The adapter writes the deployable Worker into `dist/astro`.
 3. **`Astro.locals.runtime.env` was removed in Astro ≥ 6.** Bindings are read via
    `import { env } from 'cloudflare:workers'` — the same module the TanStack
    `src/lib/cloudflare-env.ts` used — and only from `prerender = false` modules
@@ -205,10 +215,29 @@ prepare a search-island UI boundary but must not proxy search through SSR.
 1. **Rate limiting** — the per-request Worker limiter and its custom 429 HTML
    move to **Cloudflare Rate Limiting Rules** (platform config). App-level
    limiting stays only on on-demand routes.
-2. **URL structure** — `/` becomes a `302` (language negotiation); content lives
-   at `/{ja,en}/…`. `GET /` / `GET /about` no longer return `200` directly.
-3. **`robots.txt` body** — `Sitemap:` line points at `/sitemap-index.xml`.
-4. **Sitemap** — one hand-written `<url>` becomes the three-stream design above.
+2. **URL structure** — `/` is a `302` (language negotiation); content lives at
+   `/{ja,en}/…`. Region is **not** a path (`PUBLIC_REGION` only — no `/jp/`).
+   `GET /` / `GET /about` no longer return `200` on the unprefixed URL.
+3. **`robots.txt` body** — target is `/sitemap-index.xml` (today still
+   `/sitemap.xml`; remaining work).
+4. **Sitemap** — three streams (`sitemap-index`, `sitemap-0`, `sitemap-dynamic`)
+   replace the one hand-written `/sitemap.xml` (remaining work).
+
+## Publishing pages (implemented 2026-09-10)
+
+This is the document CMS slice that actually shipped. It does **not** change the Rails API.
+
+- **Rails** remains the durable publishing authority. Edge consumes the existing contract:
+  `GET /api/v0/entries?locale=`, `GET /api/v0/entries/:public_id?locale=`.
+- **`public_id`** is the resource identity. Public URLs are `/{lang}/entries/{public_id}/`. There is no slug lookup, no search API, and no collection scan to discover an Entry.
+- **Cloudflare Workers + Astro SSR.** Each publishing route is `export const prerender = false`. Hybrid `output: 'static'` is preserved for about/offline/404; publishing pages are on-demand.
+- **Every page request** fetches Rails through the existing Workers VPC Rails client (`getEdgeBindings()` → `getRailsClient()` → `UMAXICA_APPS_EDGE_CF_WORKERS_VPC`). No application cache, Workers Cache, ISR, or build-time content fetch.
+- **No browser-side Rails fetch.** The first HTML contains title, heading, summary, and (when `body.text` is a string) body text. `body` is validated as an object; `body.text` is not a frozen public contract.
+- **Language home** (`/{lang}/`) is prerendered SSG. It does not SSR Rails. A React island (`client:load`) fetches same-origin `GET /api/v0/entries?locale=` which the Worker answers through the existing VPC Rails client. The browser never calls a Rails origin. **About** (`/{lang}/about/`) stays static with no island. Global `/` still negotiates `Accept-Language` and 302s to `/ja/` or `/en/`.
+- **Index** `/{lang}/entries/` lists one Rails page (cursor query is honoured; the Worker does not crawl every cursor).
+- **Detail** `/{lang}/entries/{public_id}/` is addressable without visiting the index.
+- Cell check: `namespace` + `surface` must match the unit (e.g. `info`/`app`) or the response is `invalid-contract` (502).
+- Error mapping follows the existing Rails-client result kinds: 404 → 404; VPC missing/unreachable → 503; timeout → 504; Rails 5xx / invalid JSON / invalid contract / 401/403 / unexpected redirect → 502; 429 → 503; Astro throw → 500. Upstream bodies, hostnames, and `Set-Cookie` are not forwarded.
 
 ## Rails contract — recorded requirements, NOT settled here
 
@@ -245,39 +274,33 @@ module from document fetch even though both use the VPC binding.
 
 ## Repository-level updates
 
-- `tools/check-workers.mjs` — the `astro:*` scripts blank `CLOUDFLARE_ENV`; the
-  juxtaposed state (two wrangler configs per unit) passes today. A
-  `railsBackedAstro` manifest class and a `checkAstroWorker()` (the adapter's
-  generated `wrangler.json` legitimately carries `ASSETS` / `IMAGES` bindings,
-  which `checkViteWorker()` forbids) are added at cutover — **TODO**.
-- `tools/workers-manifest.json` — comment records the juxtaposition and the
-  future class move.
-- Generated Cloudflare types, repository invariant tests — reviewed at cutover.
+- `tools/workers-manifest.json` class `railsBackedAstro` and
+  `checkAstroWorker()` in `tools/check-workers.mjs` — **done** (input config
+  has no `assets.directory`; HTML handling is `auto-trailing-slash` /
+  `404-page`).
+- Generated Cloudflare types and invariant tests — updated for Astro health
+  routes and title/layout paths. Further document-route invariants wait on
+  Phase 3.
 
 ## Migration state (2026-09-02)
 
-- **Phase 1** — `app/info` Astro pilot, juxtaposed with its TanStack build.
-- **Phase 2** — mechanical rollout to all twelve units.
-
-Green for all twelve: `astro build`, `test-astro/verify-seo.mjs` (JS-disabled
-indexable content), `pnpm --dir <unit> run check` (format / lint / lint:types /
-check:generated / typecheck / knip / the untouched TanStack Vitest suite), the
-repository invariant suite, `pnpm run check:deps` / `check:spelling` /
-`check:architecture` / `check:workers`.
-
-**Not done:** real `wrangler deploy`; Workers VPC `remote: true` against live
-Rails (`/health` answers `503` `not-configured` locally, which is `adr/009`'s
-documented production default); the Rails-document SSR layer, `DocumentShell`,
-Content Collections, `/sitemap-dynamic.xml`, `robots.txt` → `sitemap-index`,
-`ETag` / `Last-Modified` / `304`, `410` handling, the middleware CSP builder, and
-the Phase 2 cache — all depend on the Rails contract above and are Phase 3+.
+- **Phase 0 (done)** — twelve units Astro-only. Cores TanStack. Apex Hono.
+  Language prefixes `/ja/` `/en/`. Region is `PUBLIC_REGION`, not a path.
+- **Phase 3 (not done)** — document CMS: Content Collections, DocumentShell,
+  Rails document SSR (fixtures until Rails exists), HTTP lifecycle including
+  410, HTML ETag / Last-Modified / 304, three sitemaps, robots → sitemap-index,
+  document-fetch log, on-demand CSP builder. **Plan:
+  `plans/astro-content-surfaces-remaining.md`.** Start at `app/docs` only.
+- **Phase 4 (not done)** — Workers Cache after Phase 3 is proven.
+- **Ops (not done)** — production deploy; live VPC against Rails.
 
 Cloudflare Dashboard resources were not touched. No deploy was run.
 
 ## Outcome
 
-**Accepted for the framework decision and the twelve-unit rollout.** The
-document-SSR layer is designed and recorded here but pending the Rails public
-read contract. Proceed unit-by-unit to production only with an explicit
-deploy authorisation and a live Rails path, per `adr/013`'s "do not deploy on
-this evidence alone."
+**Accepted for the framework decision and the twelve-unit Astro cutover.** The
+document-SSR layer is designed here and scheduled in
+`plans/astro-content-surfaces-remaining.md`; it is pending the Rails public
+read contract and must not invent that contract. Proceed to production only
+with an explicit deploy authorisation and a live Rails path, per `adr/013`'s
+"do not deploy on this evidence alone."

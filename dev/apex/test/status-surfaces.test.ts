@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createApexApp } from '../src/create-apex-app';
 
-const service = 'dev';
-
 afterEach(() => vi.restoreAllMocks());
 
 /*
@@ -19,14 +17,11 @@ afterEach(() => vi.restoreAllMocks());
 describe('apex 5xx surface', () => {
   it('uses the 5xx reload affordance on unexpected errors', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const app = createApexApp(
-      (routes) => {
-        routes.get('/boom', () => {
-          throw new Error('hidden');
-        });
-      },
-      { service },
-    );
+    const app = createApexApp((routes) => {
+      routes.get('/boom', () => {
+        throw new Error('hidden');
+      });
+    });
     const response = await app.request('/boom', { headers: { 'accept-language': 'ja' } });
     expect(response.status).toBe(500);
     const body = await response.text();
@@ -58,14 +53,11 @@ describe('apex 5xx surface', () => {
  */
 describe('apex 4xx surface', () => {
   it('localises the 4xx title and withholds the 5xx reload affordance', async () => {
-    const app = createApexApp(
-      (routes) => {
-        routes.get('/refused', () => {
-          throw new HTTPException(400);
-        });
-      },
-      { service },
-    );
+    const app = createApexApp((routes) => {
+      routes.get('/refused', () => {
+        throw new HTTPException(400);
+      });
+    });
 
     const response = await app.request('/refused', { headers: { 'accept-language': 'ja' } });
     expect(response.status).toBe(400);

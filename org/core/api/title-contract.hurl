@@ -57,17 +57,23 @@ xpath "string(//title)" matches /^.+ — UMAXICA \(ORG\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
 
-# The contract applies to HTML and must leave the JSON surfaces alone: a `title`
-# key appearing in either payload would mean the renderer had reached a response
-# it does not own.
-GET {{base}}/revision
+# The contract applies to HTML and must leave machine surfaces alone: a `title`
+# key appearing in the JSON identity payload would mean the renderer had reached
+# a response it does not own.
+GET {{base}}/api/v0/revision.json
 HTTP 200
 [Asserts]
 header "content-type" matches /^application\/json/
 jsonpath "$.title" not exists
 
-GET {{base}}/health
-HTTP *
+GET {{base}}/revision
+HTTP 200
 [Asserts]
-header "content-type" matches /^application\/json/
-jsonpath "$.title" not exists
+header "content-type" matches /^text\/plain/
+body not contains "<title"
+
+GET {{base}}/health
+HTTP 200
+[Asserts]
+header "content-type" == "text/plain; charset=utf-8"
+body not contains "<title"

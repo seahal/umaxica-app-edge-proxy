@@ -48,50 +48,24 @@
   // The top level IS production; there is no `env.production`.
   // Deploy scripts blank CLOUDFLARE_ENV so a no-`--env` deploy stays production, and the
   // tier reaches the Worker as EDGE_ENV only. tools/check-workers.mjs enforces both.
+  //
+  // Rails is reached over the public internet with the Worker's own `fetch`, at the origin
+  // named by `RAILS_ORIGIN` — there is no Workers VPC binding. See
+  // adr/018-core-rails-direct-internet.md. Production names no Rails origin yet, so every
+  // Rails-owned path fails closed to 503 and `/health` reports Rails as not configured.
+  // Add `RAILS_ORIGIN` here (https only) once the public Rails host exists.
   "vars": {
     "EDGE_ENV": "production",
     "NODE_ENV": "production",
     "BRAND_NAME": "UMAXICA"
   },
 
-  // BOOTSTRAP: production points at the DEVELOPMENT VPC Service, on purpose.
-  //
-  // AWS production Rails does not exist yet, and neither does a production tunnel. The one
-  // VPC Service that exists terminates on a developer's machine, so a deployed production
-  // Worker reaches local Rails through it. That is the point: it is the only way to exercise
-  // the real deployed path — Cloudflare edge → Workers VPC → VPC Service → tunnel → Rails —
-  // before AWS exists. Production Rails connectivity therefore depends on a laptop being up.
-  //
-  // No `remote` key here. `remote: true` is a LOCAL-development flag; it makes wrangler proxy
-  // the binding out to Cloudflare instead of simulating it, and has no meaning for a deployed
-  // Worker, which owns the real binding either way.
-  // https://developers.cloudflare.com/workers/development-testing/#remote-bindings
-  //
-  // AWS cutover, in this order: provision a production tunnel and a production VPC Service,
-  // then replace ONLY the `service_id` below. The binding name and every line of application
-  // code stay as they are — `getRailsClient()` selects the VPC transport by the presence of
-  // the runtime binding, never by an environment name.
-  // See adr/006-development-workers-vpc-transport.md.
-  "vpc_services": [
-    {
-      "binding": "UMAXICA_APPS_EDGE_CF_WORKERS_VPC",
-      "service_id": "019f5fe0-287f-7040-9f2f-036cb5b21df7"
-    }
-  ],
-
   "env": {
-    // `local` is the everyday development loop, and the ONLY environment that
-    // declares no `vpc_services`.
-    //
-    // Wrangler treats a VPC Service as a resource with no local simulator, so any
-    // environment that names one forces a remote proxy session, and that session
-    // needs an interactive `wrangler login` rather than an API token. `vite dev`
-    // runs the Worker in workerd, so it would open one — which is why this tier
-    // exists rather than reusing `development`.
-    //
-    // Rails is reached instead through the direct transport
-    // in `src/lib/rails-client.ts`, gated on EDGE_LOCAL_NODE_RUNTIME +
-    // EDGE_LOCAL_RAILS_ENABLED, over the private Podman network. Measured
+    // `local` is the everyday `pnpm dev` loop. It names no `RAILS_ORIGIN`, so by default
+    // Rails-owned paths fail closed to 503 and `/health` reports Rails as not configured —
+    // which is what `pnpm test:api`, Playwright and CI (none of which run Rails) need.
+    // To reach the development container's Rails, copy `.dev.vars.example` to
+    // `.dev.vars` and uncomment `RAILS_ORIGIN=http://core.com.localhost:3000`. Measured
     // 2026-08-22: workerd reaches `http://core.com.localhost:<port>` with
     // `global_fetch_strictly_public` set, so that flag needs no exception here.
     //
@@ -141,40 +115,14 @@
         }
       ]
     },
+    // Names no Rails origin yet, like production and `local`. Add `RAILS_ORIGIN` (https only) when the
+    // development Rails host is published.
     "development": {
       "vars": {
         "EDGE_ENV": "development",
         "NODE_ENV": "development",
         "BRAND_NAME": "UMAXICA"
       },
-      // The ordinary development loop reaches Rails over the real binding.
-      //
-      // `remote: true` is what makes that possible: wrangler runs this Worker's code in
-      // local workerd and proxies only this binding out to Cloudflare, which is the
-      // documented way to reach a VPC Service in local development.
-      // https://developers.cloudflare.com/workers-vpc/configuration/vpc-services/
-      //
-      // It has a price, and it is not optional. Wrangler classifies a VPC Service as a
-      // resource that can never be simulated locally, so ANY local tooling that resolves
-      // this environment opens a remote proxy session — and that session cannot be
-      // authenticated with an API token, only with an interactive `wrangler login`.
-      // Without one, measured 2026-08-16:
-      //   pnpm preview  — fails outright; the command cannot resolve the binding.
-      //   pnpm dev      — keeps serving, but loses EVERY Cloudflare binding, not just
-      //                   this one, so `pnpm test:api` fails on /revision.
-      // See adr/006-development-workers-vpc-transport.md.
-      //
-      // That is why `pnpm dev` no longer selects this environment. It selects `local`
-      // below, which declares no VPC service at all, so the everyday loop needs no
-      // credentials and CI — which has none — can still run `pnpm test:api`.
-      // `pnpm dev:vpc` selects `vpc` when the real transport is what is being tested.
-      "vpc_services": [
-        {
-          "binding": "UMAXICA_APPS_EDGE_CF_WORKERS_VPC",
-          "service_id": "019f5fe0-287f-7040-9f2f-036cb5b21df7",
-          "remote": true
-        }
-      ],
       "version_metadata": {
         "binding": "REVISION"
       },
@@ -209,59 +157,10 @@
         }
       ]
     },
-    // `vpc` runs this Worker locally with the VPC binding proxied to the real development VPC
-    // Service (`remote: true`, so it needs `wrangler login`). Never deployed, and kept out of
-    // `env.development` so `pnpm dev` stays credential-free.
-    // See adr/006-development-workers-vpc-transport.md.
-    "vpc": {
-      "vars": {
-        "EDGE_ENV": "vpc",
-        "NODE_ENV": "development",
-        "BRAND_NAME": "UMAXICA"
-      },
-      "version_metadata": {
-        "binding": "REVISION"
-      },
-      "vpc_services": [
-        {
-          "binding": "UMAXICA_APPS_EDGE_CF_WORKERS_VPC",
-          "service_id": "019f5fe0-287f-7040-9f2f-036cb5b21df7",
-          "remote": true
-        }
-      ],
-      "ratelimits": [
-        {
-          "name": "RATE_LIMITER",
-          "namespace_id": "4002",
-          "simple": {
-            "limit": 2000,
-            "period": 60
-          }
-        },
-        // A second, much smaller budget for the Rails-owned paths that authenticate.
-        // `src/worker.ts` consults it IN ADDITION to RATE_LIMITER for /oidc/* and
-        // /sign/out, so the general budget still bounds a client's total traffic and
-        // this one bounds the part of it that can attempt a credential. A limit sized
-        // for ordinary page views is not anti-automation on the authentication path
-        // (ASVS V2.2.1), which is what one shared limiter amounted to.
-        //
-        // 60/minute is ~33x stricter than the page budget while still leaving room for
-        // a NAT'd office sharing one address; it is a starting point to tune against
-        // real traffic, not a measured figure. Its namespace_id series is X10N so a
-        // counter is never shared with RATE_LIMITER — sharing one would merge the two
-        // budgets back into the single limiter this exists to split.
-        {
-          "name": "AUTH_RATE_LIMITER",
-          "namespace_id": "4102",
-          "simple": {
-            "limit": 60,
-            "period": 60
-          }
-        }
-      ]
-    },
     // `test` is never deployed — it only resolves test-tier config for
-    // `wrangler dev --env test`. Only non-inheritable keys are repeated here.
+    // `wrangler dev --env test`. Only non-inheritable keys are repeated here. It
+    // names no Rails origin on purpose: a test tier that can reach a real Rails is
+    // not a test tier.
     "test": {
       "vars": {
         "EDGE_ENV": "test",

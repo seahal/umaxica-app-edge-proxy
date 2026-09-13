@@ -1,10 +1,10 @@
-// Knip boundary for ONE deployment unit: org/news (Cloudflare Workers).
+// Knip boundary for ONE deployment unit (a TanStack Start public content unit
+// on Cloudflare Workers).
 //
 // This file is deliberately self-contained: it extends nothing at the
 // repository root, so this directory stays valid if it is ever extracted into
-// its own repository. Run it with `pnpm --dir org/news exec knip` or
-// `pnpm --filter <pkg> run knip`. Knip finds no pnpm-workspace.yaml at this
-// level, so it analyses this unit alone and never reaches a sibling unit.
+// its own repository. Knip finds no pnpm-workspace.yaml at this level, so it
+// analyses this unit alone and never reaches a sibling unit.
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
 
@@ -13,54 +13,21 @@
   // TanStack Start route tree: every file under `src/routes/` is discovered by
   // the router plugin at build time and generated into `src/routeTree.gen.ts`,
   // which nothing in the repository imports by hand.
-  //
-  // `src-astro/**` and `astro.config.mjs` are the Astro pilot (plan Phase 1),
-  // juxtaposed with the TanStack Start build. Astro discovers `src-astro/pages/**`
-  // by convention and `astro.config.mjs` is its config entry; `test-astro/` holds
-  // the JS-disabled SEO verification script (`astro:verify`).
-  "entry": [
-    "src/routes/**/*.{ts,tsx}",
-    "test/**/*.test.{ts,tsx}",
-    "e2e/**/*.spec.ts",
-    "src-astro/pages/**/*.{ts,astro}",
-    "src-astro/**/*.astro",
-    "test-astro/**/*.mjs"
-  ],
+  "entry": ["src/routes/**/*.{ts,tsx}", "test/**/*.test.{ts,tsx}", "e2e/**/*.spec.ts"],
 
-  "project": ["**/*.{ts,tsx,css,astro,mjs}"],
-
-  "astro": {
-    "config": ["astro.config.mjs"],
-    "entry": ["src-astro/pages/**/*.{astro,ts}", "src-astro/content.config.ts"]
-  },
+  "project": ["**/*.{ts,tsx,css}"],
 
   // `catalog:` version specifiers resolve from the repository-root
-  // pnpm-workspace.yaml, which does not exist inside this unit. That is a real
-  // repository-split coupling (the specifiers must be inlined when splitting),
-  // but it is a version-resolution concern rather than an unused-code one, so
-  // it is excluded here and tracked as a boundary finding instead.
+  // pnpm-workspace.yaml, which does not exist inside this unit. That is a
+  // version-resolution concern rather than an unused-code one.
   "exclude": ["catalogReferences"],
 
-  // Declared but not yet imported anywhere in this unit. `react-aria-components` is
-  // the agreed component library for the shell's interactive controls (see
-  // docs/design/ui-shell-contract.md); it is installed across all fifteen Next
-  // units up front so the archetypes cannot diverge on which library they
-  // reach for. Remove this entry from the unit that gains the first consumer —
-  // it is a placeholder for work not yet done, not a permanent exemption.
-  //
-  // `tailwindcss` used to be listed here too, on the grounds that Knip could not
-  // parse CSS at-rules. It can, once `.css` is in `project` above: the engine is
-  // now resolved from `@import 'tailwindcss'` in the stylesheet like any other
-  // import, and a suppression became a real check.
-  //
-  // `cloudflare` is not a package. `src/lib/cloudflare-env.ts` imports
-  // `cloudflare:workers`, a module the Workers runtime provides, and Knip reads
-  // the part before the colon as a package name. There is nothing to install and
-  // nothing to remove.
-  "ignoreDependencies": ["cloudflare", "react-aria-components"],
+  // `cloudflare` is not a package. `src/lib/env.ts` imports `cloudflare:workers`,
+  // a module the Workers runtime provides, and Knip reads the part before the
+  // colon as a package name.
+  "ignoreDependencies": ["cloudflare"],
 
   // Types and constants that a module exports as part of its own public surface
-  // and also consumes internally (e.g. RailsClientInit, DEFAULT_BRAND_SEPARATOR)
-  // are not dead code.
+  // and also consumes internally are not dead code.
   "ignoreExportsUsedInFile": true
 }

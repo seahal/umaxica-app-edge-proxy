@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Edge layer of Umaxica: fifteen TanStack Start frames + five apex Hono Workers, all built with Vite and deployed to Cloudflare Workers. Twenty deployment units, one shared script contract.
+Edge layer of Umaxica: twelve Astro public content surfaces (`{app,com,org}/{docs,help,info,news}`), three TanStack Start cores, and five apex Hono Workers. All built with Vite (Astro uses Vite internally) and deployed to Cloudflare Workers. Twenty deployment units, one shared script contract.
 
 ## Setup & commands
 
@@ -14,7 +14,7 @@ pnpm is the ONLY package manager. Never use npm, npx, yarn, or bun. `pnpm-lock.y
 - Unit tests: `pnpm run test` (Vitest). Coverage is per-unit (`pnpm --dir <unit> run test:cov`); the root invariant suite does not measure it.
 - HTTP tests: `pnpm run test:api` (Hurl)
 - Browser tests: `pnpm run test:e2e` (Playwright; run `pnpm exec playwright install chromium` first — CI deliberately skips e2e, do not "fix" that)
-- Build: `pnpm run build` (Vite for every unit)
+- Build: `pnpm run build` (Astro for the twelve content surfaces, Vite for cores and apex)
 - Bundle budget: `pnpm run check:size` (requires `pnpm run build` first; NOT part of `check:static`)
 - Dead code: `pnpm run knip` · Architecture: `pnpm run check:architecture` · Version sync: `pnpm run check:deps` (`fix:deps` is local-only) · Spelling: `pnpm run check:spelling`
 - Per-unit: `pnpm --filter <workspace> run <script>` or `pnpm --dir <unit> run <script>`
@@ -50,12 +50,28 @@ Each deployment unit owns its own `.oxlintrc.json`, `.oxfmtrc.json`, `tsconfig.j
 
 All twenty units implement the same contract, including `dev/apex`; none is exempt.
 
+## Evidence
+
+Completed tests, validations, verifications, audits, security checks and
+performance checks leave a short record in `evidence/` when retaining the result
+is useful. Records describe work that was actually performed — never plans,
+intentions, or unverified claims. A check that could not be completed is
+recorded as such, with the reason and whatever was observed.
+
+- `evidence/` is flat; no subdirectories.
+- Only `.md` files.
+- `YYYY-MM-DD-<topic>.md`, ISO date, lowercase hyphenated topic.
+- No raw logs, screenshots, binaries, archives, dumps, generated reports or
+  other large artifacts. Summarize them, and cite the commands, identifiers,
+  hashes, measurements and excerpts that carry the result.
+- Enforced by `pnpm run test` (`test/evidence-layout.test.ts`).
+
 ## Logging
 
 `no-console` is an **error** in every unit. Never call `console` directly or add a new disable comment. The only two sanctioned emitters (closed, typed surfaces):
 
 - `*/apex/src/structured-logger.ts` — `@hono/structured-logger` middleware, wired in `create-apex-app.ts`
-- `*/core/src/lib/rails-dispatch-log.ts` — the Edge → Workers VPC → Rails hop
+- `*/core/src/lib/rails-dispatch-log.ts` — the Edge → Rails hop (public internet, `RAILS_ORIGIN`)
 
 Both emit one JSON line `{ level, msg, data }`, collected by `observability.logs.enabled` in each `wrangler.jsonc`. No external observability vendor; adding one is a decision, not a detail.
 

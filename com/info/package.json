@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "EDGE_LOCAL_NODE_RUNTIME=1 CLOUDFLARE_ENV=local vite dev --port 5103 --host",
-    "dev:vpc": "CLOUDFLARE_ENV=vpc vite dev --port 5103 --host",
-    "build": "CLOUDFLARE_ENV= vite build",
+    "dev": "EDGE_LOCAL_NODE_RUNTIME=1 CLOUDFLARE_ENV=local PUBLIC_REGION=jp vite dev --port 5103 --host",
+    "dev:vpc": "CLOUDFLARE_ENV=vpc PUBLIC_REGION=jp vite dev --port 5103 --host",
+    "build": "CLOUDFLARE_ENV= PUBLIC_REGION=jp vite build",
     "preview": "pnpm run build && CLOUDFLARE_ENV= vite preview --port 5103",
     "deploy": "pnpm run build && CLOUDFLARE_ENV= wrangler deploy",
     "deploy:upload": "pnpm run build && CLOUDFLARE_ENV= wrangler versions upload",
@@ -17,6 +17,7 @@
     "typecheck": "pnpm run cf-typegen && tsc --noEmit",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
+    "test:stress": "vitest run --sequence.shuffle --no-cache",
     "test:api": "node api/run.mjs",
     "test:e2e": "playwright test",
     "knip": "knip --treat-config-hints-as-errors",
@@ -28,19 +29,13 @@
     "lint:fix": "oxlint --type-aware --fix .",
     "check:generated": "pnpm run cf-typegen && CLOUDFLARE_ENV= wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts --check",
     "check:static": "pnpm run format:check && pnpm run lint && pnpm run lint:types && pnpm run check:generated && pnpm run typecheck && pnpm run knip",
-    "check:size": "size-limit",
-    "astro:dev": "astro dev --port 5113",
-    "astro:build": "CLOUDFLARE_ENV= PUBLIC_REGION=jp astro build",
-    "astro:preview": "pnpm run astro:build && CLOUDFLARE_ENV= wrangler dev --config dist/astro/server/wrangler.json --port 5113",
-    "astro:verify": "pnpm run astro:build && node test-astro/verify-seo.mjs"
+    "check:size": "size-limit"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "catalog:",
     "@fontsource-variable/inter": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
     "react": "catalog:",
-    "react-aria-components": "catalog:",
     "react-dom": "catalog:"
   },
   "devDependencies": {
@@ -51,13 +46,11 @@
     "@size-limit/file": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@testing-library/jest-dom": "catalog:",
-    "@testing-library/react": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "astro": "catalog:",
     "happy-dom": "catalog:",
     "knip": "catalog:",
     "oxfmt": "catalog:",
@@ -69,5 +62,11 @@
     "vite": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:"
-  }
+  },
+  "browserslist": [
+    "chrome 111",
+    "edge 111",
+    "firefox 111",
+    "safari 16.4"
+  ]
 }

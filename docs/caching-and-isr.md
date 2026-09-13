@@ -36,8 +36,9 @@ repository から消え、置き換えも入っていない。したがって IS
 
 ## 未解決事項
 
-12 の公開系 surface は Rails からコンテンツを取得する実装がまだ入っていない。
-入る時点で、キャッシュ層をどこに置くかを改めて決める必要がある。選択肢は Next の
+12 の公開系 surface は `/{lang}/entries/` を毎リクエスト Rails SSR する。この
+フェーズでは application cache / Workers Cache / ISR は入れない。Phase 2 の
+キャッシュ層は correctness 確認後の別作業。選択肢は Next の
 ISR ではなくなったので、決め直しであって移植ではない:
 
 - **HTTP キャッシュ**(`Cache-Control: s-maxage` + Cloudflare の edge cache、
@@ -58,8 +59,8 @@ ISR ではなくなったので、決め直しであって移植ではない:
 - binding は capability であり、Rails を fetch しない worker には付与しない。
   5 つの apex Worker は `standalone` のままで、binding を持たない。
 - 15 フレームは既に全て `railsBackedVite` で、binding を持っている。公開系 12
-  surface でそれを使っているのは今のところ `/health` の Rails liveness
-  (`src/lib/rails-health.ts`、ADR 009)だけで、コンテンツ取得はまだ入っていない。
+  surface でそれを使っているのは今のところ `/health` の Rails Health API
+  (`src/lib/rails-health.ts`、ADR 016)だけで、コンテンツ取得はまだ入っていない。
   入れるときは既存の `src/lib/rails-client.ts` の中に足す — 分類の移動は不要で、
   `contentSurface` は空のまま(Rails を見ない frame が存在しないため)。
 - 分類と wrangler 設定の整合は `pnpm run check:workers`(CI の `check-workers`

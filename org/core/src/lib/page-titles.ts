@@ -29,4 +29,5 @@ export const pageTitles = {
   explore: brandTitle(ja.explore.title),
   messages: brandTitle(ja.messages.title),
   notifications: brandTitle(ja.notifications.title),
+  publishing: brandTitle(ja.publishing.title),
 } as const;

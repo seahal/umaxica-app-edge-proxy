@@ -9,6 +9,7 @@ import { blockedCoreResponse, classifyCorePath, dispatchToRails } from '../src/l
 
 const FRAME = 'com/core';
 const ORIGIN = 'https://jp.umaxica.com';
+const RAILS = 'https://rails.example';
 
 /** `dispatchToRails` logs on every path; keep the reporter clean. */
 beforeEach(() => {
@@ -19,18 +20,17 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
-
-function envWith(fetch: unknown) {
-  return { UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } as unknown as Fetcher };
-}
 
 function railsReturns(response: Response) {
   return vi.fn().mockResolvedValue(response);
 }
 
+// The dispatcher calls the runtime's global `fetch`; stubbing it is the driver.
 async function dispatch(request: Request, fetch: unknown) {
-  return dispatchToRails(request, envWith(fetch), true);
+  vi.stubGlobal('fetch', fetch);
+  return dispatchToRails(request, { RAILS_ORIGIN: RAILS }, true);
 }
 
 describe(`${FRAME} classifyCorePath`, () => {
@@ -43,6 +43,8 @@ describe(`${FRAME} classifyCorePath`, () => {
     // Rails-owned, prefix matched.
     ['/api/v0/session', 'rails'],
     ['/api/v0', 'rails'],
+    ['/api/v0/health.json', 'next'],
+    ['/api/v0/revision.json', 'next'],
     ['/web/v0/thing', 'rails'],
     ['/edge/v0/widgets', 'rails'],
     ['/oidc/callback', 'rails'],
@@ -54,6 +56,9 @@ describe(`${FRAME} classifyCorePath`, () => {
     ['/csp-violation-report', 'rails'],
     // Intentional Edge overrides of paths Rails also serves.
     ['/health', 'next'],
+    ['/health/startups', 'next'],
+    ['/health/livenesses', 'next'],
+    ['/health/readinesses', 'next'],
     ['/health/liveness.json', 'blocked'],
     ['/health/readiness.json', 'blocked'],
     ['/health/startup.json', 'blocked'],
@@ -73,7 +78,11 @@ describe(`${FRAME} classifyCorePath`, () => {
     // The asymmetry that makes the unified health entry point possible: BLOCKED
     // is a raw `startsWith('/health/')`, so `/health` itself reaches Next.
     expect(classifyCorePath('/health')).toBe('next');
+    expect(classifyCorePath('/health/startups')).toBe('next');
+    expect(classifyCorePath('/health/livenesses')).toBe('next');
+    expect(classifyCorePath('/health/readinesses')).toBe('next');
     expect(classifyCorePath('/health/')).toBe('blocked');
+    expect(classifyCorePath('/health/liveness.json')).toBe('blocked');
   });
 });
 
@@ -88,12 +97,12 @@ describe(`${FRAME} blockedCoreResponse`, () => {
 });
 
 describe(`${FRAME} dispatchToRails request construction`, () => {
-  it('builds the Rails request against the public hostname, not a VPC routing label', async () => {
+  it('builds the Rails request against RAILS_ORIGIN, not the public hostname', async () => {
     const fetch = railsReturns(new Response('ok'));
     await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
 
     const request = fetch.mock.calls[0]?.[0] as Request;
-    expect(new URL(request.url).host).toBe(new URL(ORIGIN).host);
+    expect(new URL(request.url).origin).toBe(RAILS);
   });
 
   it('does not add an X-Forwarded-Host header', async () => {
@@ -218,9 +227,11 @@ describe(`${FRAME} dispatchToRails passthrough`, () => {
     await expect(response.text()).resolves.toBe('Rails 500 page');
   });
 
-  it('passes a text/plain 500 through when the body is not a ProxyError', async () => {
+  it('passes a text/plain 500 through whatever its body says', async () => {
+    // With no Workers VPC in the path, nothing answers on Rails' behalf: every
+    // response that arrives is Rails' own and goes to the browser untouched.
     const fetch = railsReturns(
-      new Response('something else entirely', {
+      new Response('ProxyError: connection_refused', {
         status: 500,
         headers: { 'content-type': 'text/plain' },
       }),
@@ -229,31 +240,7 @@ describe(`${FRAME} dispatchToRails passthrough`, () => {
     const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
 
     expect(response.status).toBe(500);
-    await expect(response.text()).resolves.toBe('something else entirely');
-  });
-
-  it('does not treat a ProxyError-shaped body under a non-500 status as a transport failure', async () => {
-    const fetch = railsReturns(
-      new Response('ProxyError: connection_refused', {
-        status: 502,
-        headers: { 'content-type': 'text/plain' },
-      }),
-    );
-
-    const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
-    expect(response.status).toBe(502);
-  });
-
-  it('does not treat a ProxyError-shaped body under a non-text content type as one', async () => {
-    const fetch = railsReturns(
-      new Response('ProxyError: connection_refused', {
-        status: 500,
-        headers: { 'content-type': 'application/json' },
-      }),
-    );
-
-    const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
-    expect(response.status).toBe(500);
+    await expect(response.text()).resolves.toBe('ProxyError: connection_refused');
   });
 });
 
@@ -271,13 +258,22 @@ describe(`${FRAME} dispatchToRails upstream failure`, () => {
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   };
 
-  it('returns 503 when no VPC binding is present, and never calls a fetcher', async () => {
-    const response = await dispatchToRails(new Request(`${ORIGIN}/api/v0/x`), {}, true);
+  it.each([
+    ['absent', {}],
+    ['plain http to a public host', { RAILS_ORIGIN: 'http://rails.example' }],
+    ['not a URL', { RAILS_ORIGIN: 'rails.example' }],
+  ])('returns 503 when RAILS_ORIGIN is %s, and never calls fetch', async (_label, env) => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+
+    const response = await dispatchToRails(new Request(`${ORIGIN}/api/v0/x`), env, true);
+
     await expectFailClosed(response);
     await expect(response.text()).resolves.toBe('Rails transport not configured');
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('returns 503 when the binding fetch rejects', async () => {
+  it('returns 503 when fetch rejects', async () => {
     const fetch = vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED 10.0.0.7:3000'));
 
     const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
@@ -307,56 +303,8 @@ describe(`${FRAME} dispatchToRails upstream failure`, () => {
     await expectFailClosed(await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch));
   });
 
-  it.each([
-    'connection_refused',
-    'connection_timeout',
-    'dns_error',
-    'tls_certificate_error',
-    'something_new',
-  ])('claims the Workers VPC ProxyError 500 for %s and answers 503', async (code) => {
-    // Workers VPC does not throw when the origin is unreachable — it answers a
-    // text/plain 500 carrying the code. Passing that through would show a
-    // stopped Rails to the browser as a Rails-authored 500.
-    const fetch = railsReturns(
-      new Response(`ProxyError: ${code}`, {
-        status: 500,
-        headers: { 'content-type': 'text/plain' },
-      }),
-    );
-
-    const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
-
-    await expectFailClosed(response);
-    await expect(response.text()).resolves.toBe('Rails upstream unavailable');
-  });
-
-  it('passes the response through when its body cannot be read', async () => {
-    const unreadable = new Response('ProxyError: connection_refused', {
-      status: 500,
-      headers: { 'content-type': 'text/plain' },
-    });
-    vi.spyOn(unreadable, 'clone').mockImplementation(() => {
-      throw new Error('body already disturbed');
-    });
-
-    const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), railsReturns(unreadable));
-    expect(response.status).toBe(500);
-  });
-
-  it.each([
-    ['rejection', () => vi.fn().mockRejectedValue(new Error('boom'))],
-    [
-      'ProxyError 500',
-      () =>
-        railsReturns(
-          new Response('ProxyError: dns_error', {
-            status: 500,
-            headers: { 'content-type': 'text/plain' },
-          }),
-        ),
-    ],
-  ])('never retries after a %s', async (_label, makeFetch) => {
-    const fetch = makeFetch();
+  it('never retries after a rejection', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('boom'));
     await dispatch(
       new Request(`${ORIGIN}/api/v0/things`, { method: 'POST', body: '{"a":1}' }),
       fetch,
@@ -365,27 +313,14 @@ describe(`${FRAME} dispatchToRails upstream failure`, () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    [
-      'ECONNREFUSED 10.0.0.7:3000',
-      () => vi.fn().mockRejectedValue(new Error('ECONNREFUSED 10.0.0.7:3000')),
-    ],
-    [
-      'connection_refused',
-      () =>
-        railsReturns(
-          new Response('ProxyError: connection_refused', {
-            status: 500,
-            headers: { 'content-type': 'text/plain' },
-          }),
-        ),
-    ],
-  ])('keeps %s out of the 503 body', async (marker, makeFetch) => {
-    const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), makeFetch());
+  it('keeps the transport error out of the 503 body', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED 10.0.0.7:3000'));
+
+    const response = await dispatch(new Request(`${ORIGIN}/api/v0/x`), fetch);
     const body = await response.text();
 
-    expect(body).not.toContain(marker);
-    expect(body).not.toContain('ProxyError');
+    expect(body).not.toContain('ECONNREFUSED');
     expect(body).not.toContain('10.0.0.7');
+    expect(body).not.toContain('rails.example');
   });
 });

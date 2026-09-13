@@ -84,9 +84,11 @@ const PREVIEW_PORT = 8787;
  * counting every Rails-backed frame rather than silently skipping a class.
  */
 export function railsBackedWorkspaces(manifest = loadManifest()) {
-  return [...manifest.railsBacked, ...(manifest.railsBackedVite ?? [])].sort((a, b) =>
-    a.localeCompare(b),
-  );
+  return [
+    ...manifest.railsBacked,
+    ...(manifest.railsBackedVite ?? []),
+    ...(manifest.railsBackedVpcVite ?? []),
+  ].sort((a, b) => a.localeCompare(b));
 }
 
 /*
@@ -96,7 +98,11 @@ export function railsBackedWorkspaces(manifest = loadManifest()) {
  * that loses the route is a FAIL here rather than a silent skip: a Rails-backed
  * frame with no `/health` cannot report the connection at all.
  */
-const HEALTH_ROUTE_PATHS = ['src/app/health/route.ts', 'src/routes/health.ts'];
+const HEALTH_ROUTE_PATHS = [
+  'src/app/health/route.ts',
+  'src/routes/health.ts',
+  'src/pages/health.ts',
+];
 
 export function loadSurfaces(manifest = loadManifest()) {
   return railsBackedWorkspaces(manifest).map((ws) => {
@@ -218,10 +224,29 @@ export function tunnelHostFor(brand, frame, env = process.env) {
   return `${frame}-jp.umaxica.${brand}`;
 }
 
-/** The Rails origin a frame will send, read from its rails-client copy. */
+/**
+ * The Rails origin a frame will send in local development.
+ *
+ * A public content cell names it as `PRIVATE_RAILS_ORIGIN` in its
+ * `src/lib/publishing-cell.ts`.
+ * A Core names it as the opt-in `RAILS_ORIGIN=` line in its `.dev.vars.example`
+ * instead — the Cores reach Rails over the public internet at a per-tier var,
+ * not over Workers VPC (ADR 018).
+ */
 export function readRailsOrigin(ws) {
-  const source = readFileSync(join(repoRoot, ws, 'src/lib/rails-client.ts'), 'utf8');
-  return /PRIVATE_RAILS_ORIGIN\s*=\s*'([^']+)'/u.exec(source)?.[1] ?? null;
+  const cellPath = join(repoRoot, ws, 'src/lib/publishing-cell.ts');
+  if (existsSync(cellPath)) {
+    const constant = /PRIVATE_RAILS_ORIGIN\s*=\s*'([^']+)'/u.exec(readFileSync(cellPath, 'utf8'))?.[1];
+    if (constant) return constant;
+  }
+  const examplePath = join(repoRoot, ws, '.dev.vars.example');
+  if (!existsSync(examplePath)) return null;
+  return /^#?\s*RAILS_ORIGIN=(\S+)$/mu.exec(readFileSync(examplePath, 'utf8'))?.[1] ?? null;
+}
+
+/** Whether a surface reaches Rails over Workers VPC. The Cores do not (ADR 018). */
+export function isVpcSurface(surface, manifest = loadManifest()) {
+  return (manifest.railsBackedVpcVite ?? []).includes(surface.ws);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,51 +493,141 @@ export function classifyIdentity({ surface, entry, transport }) {
   return { status: PASS, detail: `answered from ${actual}` };
 }
 
+/*
+ * Kept identical to `TIMEZONE_AWARE_TIMESTAMP` in the fifteen
+ * `src/lib/rails-health.ts` copies, and pinned as such by
+ * `test/rails-connection-invariants.test.ts`.
+ */
+const TIMEZONE_AWARE_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+
+const HEALTH_STATUSES = new Set(['pass', 'warn', 'fail']);
+
+const isHealthCheck = (value) =>
+  typeof value === 'object' && value !== null && HEALTH_STATUSES.has(value.status);
+
+/**
+ * Decide whether the document Rails answered with is one the Worker will accept.
+ *
+ * `Direct VPC → Rails` and `VPC identity` both stop short of this. The first
+ * proves a request arrived, the second proves which namespace answered — and a
+ * document that is byte-for-byte unusable to `rails-health.ts` passes both,
+ * because it arrives, from the right namespace, with HTTP 200.
+ *
+ * That gap is not hypothetical. ADR 016's 2026-09-06 amendment made
+ * `timestamp` a required field, and a Rails build that does not emit it makes
+ * every frame report `invalid-contract` → readiness `error` → `/health` 503,
+ * while this tool would otherwise print two green columns. A checker that
+ * disagrees with the runtime about whether the connection works is worse than
+ * no checker, so the required-field set is asserted here, against the same
+ * document, in the same run.
+ *
+ * This reads the contract only. Whether Rails is *healthy* is `status`, and
+ * that is `Direct VPC → Rails`'s business, not this gate's — a `503` carrying a
+ * well-formed `status=fail` document is a contract PASS.
+ */
+export function classifyHealthContract({ entry, transport }) {
+  if (transport !== PASS) {
+    return { status: BLOCKED, detail: 'transport did not arrive, so the contract is unproven' };
+  }
+  if (entry?.status !== 200 && entry?.status !== 503) {
+    return {
+      status: BLOCKED,
+      detail: `Rails answered ${entry?.status}, which is not the Health API contract`,
+    };
+  }
+
+  let document = null;
+  try {
+    document = JSON.parse(entry.body ?? '');
+  } catch {
+    document = null;
+  }
+  if (document === null || typeof document !== 'object') {
+    return { status: FAIL, detail: 'the body is not a JSON Health API document' };
+  }
+
+  const missing = [];
+  if (!HEALTH_STATUSES.has(document.status)) missing.push('status');
+  if (
+    typeof document.timestamp !== 'string' ||
+    !TIMEZONE_AWARE_TIMESTAMP.test(document.timestamp) ||
+    Number.isNaN(Date.parse(document.timestamp))
+  ) {
+    missing.push('timestamp');
+  }
+  for (const name of ['startup', 'liveness', 'readiness']) {
+    if (!isHealthCheck(document.checks?.[name])) missing.push(`checks.${name}`);
+  }
+
+  if (missing.length > 0) {
+    return {
+      status: FAIL,
+      detail: `rails-health.ts would report invalid-contract — ${missing.join(', ')}`,
+    };
+  }
+  return { status: PASS, detail: `status=${document.status}, all required fields present` };
+}
+
 // ---------------------------------------------------------------------------
 // /health parsing
 // ---------------------------------------------------------------------------
 
 /*
- * One shape across all fifteen frames: `/health` answers
+ * One shape across all twenty units: `/health` answers `text/plain`
  *
- *   { status, timestamp, edge: {...}, rails: { liveness: { kind, status? } } }
+ *   status: ok
+ *   startup: ok
+ *   liveness: ok
+ *   readiness: ok
  *
- * with HTTP 200 iff both halves are ok. The Rails half used to live at its own
- * `/rails-health` route; the merge is ADR 009, and it is why this parser reads
- * `rails.liveness.kind` rather than `rails.kind`.
+ * with HTTP 200 iff all three probes are ok. `startup` and `liveness` are the
+ * isolate; `readiness` is the Rails half on the fifteen frames and isolate-only
+ * on the five apex workers, which stay Rails-blind (ADR 016 decision 5).
  *
- * The four kinds are unchanged — the same vocabulary `rails-health.ts` has
- * always reported — so every gate downstream of here still reads the same.
+ * It answered a JSON document with a nested `rails.liveness.kind` until ADR 016
+ * moved the probes to `text/plain`. Nothing here reads that shape any more.
  */
-
-const RAILS_HEALTH_KINDS = new Set(['ok', 'http-error', 'unreachable', 'not-configured']);
 
 /**
- * The Rails liveness kind carried by a frame's `/health` document, or null if
- * the body is not that shape — which is itself the signal for a stale deployed
- * Worker still answering the pre-merge document.
+ * The Rails half of a frame's `/health`, read from the `readiness:` line of the
+ * `text/plain` aggregate — or null if the body is not that shape, which is
+ * itself the signal for a stale deployed Worker still answering an older
+ * document.
+ *
+ * This used to read `rails.liveness.kind` out of a JSON `/health` document.
+ * That document is gone: ADR 016 moved the probes to `text/plain`, so the JSON
+ * parser matched nothing, every caller took its `null` branch, and the Rails
+ * half of three tiers had been reported as `SKIP — does not carry Rails` for
+ * fifteen surfaces. It does carry Rails, on this line.
+ *
+ * `startup` and `liveness` are isolate-only and always `ok`; `readiness` is
+ * `edgeReadinessFromRails(checkRailsHealth(...))` verbatim (`src/routes/health.ts`
+ * and `src/pages/health.ts` in the fifteen frames). Reading it costs no request
+ * that has not already been made.
+ *
+ * What it cannot do is name the kind. ADR 016 decision 4 maps `pass`, `warn`
+ * **and** `not-configured` all onto `ok`, so `readiness: ok` proves the frame
+ * is serving but cannot tell a healthy Rails from an absent binding. Callers
+ * that need that distinction have to say which one they expected; none of them
+ * may report a guess as a measurement.
  */
-export function parseRailsHealthJson(body) {
-  try {
-    const kind = JSON.parse(body)?.rails?.liveness?.kind;
-    return RAILS_HEALTH_KINDS.has(kind) ? kind : null;
-  } catch {
-    return null;
-  }
+export function readEdgeReadiness(body) {
+  if (typeof body !== 'string') return null;
+  const readiness = /^readiness: (ok|error)$/mu.exec(body)?.[1];
+  return readiness ?? null;
 }
 
 /**
- * `/health` promises 200 when the Rails half is `ok` and 503 otherwise. Checking
- * it costs nothing and catches a route handler that reports a healthy body under
- * a failing status, or the reverse.
- *
- * Note this is the Rails half alone: a frame whose Edge half is broken answers
- * 503 with `rails.liveness.kind === 'ok'`, which this reports as a mismatch —
- * correctly, because something is wrong and it is not Rails.
+ * `/health` promises 200 when every probe is `ok` and 503 otherwise. Checking it
+ * costs nothing and catches a route handler that reports a healthy body under a
+ * failing status, or the reverse.
  */
-export function railsHealthStatusMismatch(kind, status) {
-  const expected = kind === 'ok' ? 200 : 503;
-  return status === expected ? null : `kind ${kind} should answer ${expected}, answered ${status}`;
+export function healthStatusMismatch(readiness, status) {
+  const expected = readiness === 'ok' ? 200 : 503;
+  return status === expected
+    ? null
+    : `readiness ${readiness} should answer ${expected}, answered ${status}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -775,6 +890,16 @@ async function modeConfig(report, surfaces, manifest) {
   const railsHosts = new Map();
 
   for (const surface of surfaces) {
+    // The Cores reach Rails at `RAILS_ORIGIN` over the public internet and hold
+    // no VPC binding (ADR 018); check-workers asserts that. Only their Rails
+    // Host is checked below.
+    if (!isVpcSurface(surface, manifest)) {
+      const origin = readRailsOrigin(surface.ws);
+      if (origin) railsHosts.set(surface.key, new URL(origin).host);
+      report.record('VPC config', surface.key, SKIP, 'no Workers VPC — RAILS_ORIGIN (ADR 018)');
+      continue;
+    }
+
     const problems = [];
     const { config, error } = readWranglerConfig(join(surface.ws, 'wrangler.jsonc'));
     if (error) {
@@ -1019,6 +1144,7 @@ async function modeVpc(report, surfaces, manifest, { verbose }) {
         `${verdict.layer}: ${verdict.detail}`,
       );
       report.record('VPC identity', surface.key, BLOCKED, 'no response to identify');
+      report.record('VPC contract', surface.key, BLOCKED, 'no response to check');
     }
     if (bindingLine) report.note(PASS, `Binding resolved: ${bindingLine.trim()}`);
     report.note(verdict.transport, `Layer ${verdict.layer}: ${verdict.detail}`);
@@ -1028,12 +1154,14 @@ async function modeVpc(report, surfaces, manifest, { verbose }) {
 
   let misrouted = 0;
   let unidentified = 0;
+  let unusable = 0;
 
   for (const surface of surfaces) {
     const entry = entries.find((candidate) => candidate.key === surface.key);
     if (!entry) {
       report.record('Direct VPC → Rails', surface.key, FAIL, 'the probe carries no target for it');
       report.record('VPC identity', surface.key, BLOCKED, 'not probed');
+      report.record('VPC contract', surface.key, BLOCKED, 'not probed');
       continue;
     }
 
@@ -1051,6 +1179,10 @@ async function modeVpc(report, surfaces, manifest, { verbose }) {
     report.record('VPC identity', surface.key, identity.status, identity.detail);
     if (identity.status === FAIL) misrouted += 1;
     if (identity.status === WARN) unidentified += 1;
+
+    const contract = classifyHealthContract({ entry, transport: verdict.transport });
+    report.record('VPC contract', surface.key, contract.status, contract.detail);
+    if (contract.status === FAIL) unusable += 1;
 
     if (verdict.transport === PASS && verdict.layer === 'Rails' && verdict.status !== 200) {
       report.note(FAIL, `Rails layer [${surface.key}]: ${verdict.detail}`);
@@ -1075,6 +1207,12 @@ async function modeVpc(report, surfaces, manifest, { verbose }) {
     report.note(
       WARN,
       `Identity: ${unidentified} surface(s) answered without a namespace field, so which entry point replied is unproven`,
+    );
+  }
+  if (unusable > 0) {
+    report.note(
+      FAIL,
+      `Contract: ${unusable} surface(s) answered a document rails-health.ts rejects — those frames report readiness error and serve /health 503 despite the transport being up (ADR 016)`,
     );
   }
 
@@ -1124,7 +1262,7 @@ async function checkHttpSurface(report, surface, baseUrl, gatePrefix) {
     // A Rails-backed frame with no `/health` cannot report the connection at
     // all, so this is a FAIL rather than a skip.
     report.record(`${gatePrefix} /health`, surface.key, FAIL, 'frame has no /health route');
-    return { kind: null, status: 0, statusProblem: null };
+    return { readiness: null, status: 0, statusProblem: null, body: '' };
   }
 
   const health = await httpGet(`${baseUrl}/health`, 30_000).catch((e) => ({
@@ -1132,16 +1270,12 @@ async function checkHttpSurface(report, surface, baseUrl, gatePrefix) {
     body: String(e),
   }));
 
-  const kind = parseRailsHealthJson(health.body);
+  const readiness = readEdgeReadiness(health.body);
 
-  // The Edge half, read from the same document. `status: 'ok'` is the top-level
-  // verdict and is only ever `ok` when both halves are.
-  let edgeOk = false;
-  try {
-    edgeOk = JSON.parse(health.body)?.edge?.status === 'ok';
-  } catch {
-    edgeOk = false;
-  }
+  // The Edge half, read from the same document. `startup` and `liveness` are
+  // the isolate alone, so they are what says this Worker is up regardless of
+  // what readiness found downstream.
+  const edgeOk = /^startup: ok$/mu.test(health.body) && /^liveness: ok$/mu.test(health.body);
   report.record(
     `${gatePrefix} /health`,
     surface.key,
@@ -1150,14 +1284,14 @@ async function checkHttpSurface(report, surface, baseUrl, gatePrefix) {
   );
 
   let statusProblem = null;
-  if (kind) {
-    statusProblem = railsHealthStatusMismatch(kind, health.status);
+  if (readiness) {
+    statusProblem = healthStatusMismatch(readiness, health.status);
     if (statusProblem) {
       report.note(FAIL, `${surface.ws} ${gatePrefix} /health: ${statusProblem}`);
     }
   }
 
-  return { kind, status: health.status, statusProblem };
+  return { readiness, status: health.status, statusProblem, body: health.body };
 }
 
 // Fifteen dev servers at once is what root `pnpm dev` already does, and
@@ -1206,43 +1340,40 @@ async function runNextBatch(report, surfaces) {
       }
 
       report.record('Local dev server', surface.key, PASS, `listening on ${surface.port}`);
-      const { kind, status } = await checkHttpSurface(report, surface, baseUrl, 'Local');
+      const { readiness, status } = await checkHttpSurface(report, surface, baseUrl, 'Local');
 
+      /*
+       * `readiness: ok` is `pass`, `warn` or `not-configured` (ADR 016 decision
+       * 4), and outside the Rails overlay it is `not-configured` — no binding
+       * exists to be anything else. So `ok` is the expected answer either way,
+       * and the detail says which one was expected rather than claiming to have
+       * measured which one it got.
+       */
       const localRailsEnabled = process.env.EDGE_LOCAL_RAILS_ENABLED === '1';
-      if (!localRailsEnabled && kind === 'not-configured') {
-        report.record(
-          'Local /health rails',
-          surface.key,
-          PASS,
-          'not-configured (expected without the optional Rails overlay)',
-        );
-      } else if (localRailsEnabled && kind === 'ok') {
-        report.record(
-          'Local /health rails',
-          surface.key,
-          PASS,
-          'ok via the private Podman Rails network (NOT Tunnel or VPC evidence)',
-        );
-      } else if (localRailsEnabled && kind) {
+      if (readiness === null) {
         report.record(
           'Local /health rails',
           surface.key,
           FAIL,
-          `${kind} on the explicitly enabled private Podman Rails path`,
+          `/health carries no readiness line, HTTP ${status}`,
         );
-      } else if (kind) {
+      } else if (readiness === 'ok') {
         report.record(
           'Local /health rails',
           surface.key,
-          FAIL,
-          `${kind}: a transport appeared without the Rails overlay`,
+          PASS,
+          localRailsEnabled
+            ? 'readiness ok via the private Podman Rails network (NOT Tunnel or VPC evidence)'
+            : 'readiness ok, expected not-configured without the Rails overlay',
         );
       } else {
         report.record(
           'Local /health rails',
           surface.key,
           FAIL,
-          `unrecognised JSON response, HTTP ${status}`,
+          localRailsEnabled
+            ? 'readiness error on the explicitly enabled private Podman Rails path'
+            : 'readiness error, but no Rails transport is configured — the frame should read not-configured',
         );
       }
     }
@@ -1336,27 +1467,31 @@ async function runPreviewSurface(report, surface, { script, gate, withVpc, port,
 
       report.record('bundler build', surface.key, PASS, 'built and started on workerd');
 
-      const { kind } = await checkHttpSurface(
+      const { readiness, status } = await checkHttpSurface(
         report,
         surface,
         baseUrl,
         withVpc ? 'Preview(vpc)' : 'Preview',
       );
 
-      if (withVpc) {
+      if (readiness === null) {
+        report.record(gate, surface.key, FAIL, `/health carries no readiness line, HTTP ${status}`);
+      } else if (withVpc) {
+        // The binding is live here, so `ok` is a reached and healthy Rails.
         report.record(
           gate,
           surface.key,
-          kind === 'ok' ? PASS : FAIL,
-          `rails liveness: ${kind ?? 'unrecognised'}`,
+          readiness === 'ok' ? PASS : FAIL,
+          `readiness ${readiness} over the VPC Service`,
         );
       } else {
-        // No binding in env.development, so not-configured is the correct answer.
+        // No binding outside the vpc tier, so not-configured — hence `ok` — is
+        // the correct answer, and `error` means something else broke.
         report.record(
           gate,
           surface.key,
-          kind === 'not-configured' ? PASS : WARN,
-          `workerd started; rails liveness: ${kind ?? 'unrecognised'}`,
+          readiness === 'ok' ? PASS : WARN,
+          `workerd started; readiness ${readiness}, expected not-configured`,
         );
       }
     } finally {
@@ -1754,32 +1889,33 @@ async function checkTunnelSurface(report, surface) {
 async function checkTunnelApex(report, surface, base, landing, authHeaders) {
   const { key, brand } = surface;
 
-  const health = await httpGet(`${base}/health.json`, 15_000, authHeaders).catch((e) => ({
+  const health = await httpGet(`${base}/health`, 15_000, authHeaders).catch((e) => ({
     status: 0,
     body: String(e),
   }));
-  let service = null;
-  let environment = null;
-  try {
-    const parsed = JSON.parse(health.body);
-    service = parsed.service;
-    // The development server reports `environment`; the deployed production
-    // Worker's payload has no such field. So this one string distinguishes
-    // "the Tunnel answered" from "the Worker still owns the hostname" — a
-    // distinction `service` alone cannot make, since both report the brand.
-    environment = parsed.environment ?? null;
-  } catch {
-    service = null;
-  }
-  const identityOk = health.status === 200 && service === brand && environment === 'development';
+  const htmlGone = await httpGet(`${base}/health.html`, 15_000, authHeaders).catch((e) => ({
+    status: 0,
+    body: String(e),
+  }));
+  const jsonGone = await httpGet(`${base}/health.json`, 15_000, authHeaders).catch((e) => ({
+    status: 0,
+    body: String(e),
+  }));
+  const goneOk = (res) =>
+    res.status === 404 && !(res.headers?.get?.('content-type') ?? '').includes('json');
+  const identityOk =
+    health.status === 200 &&
+    (health.headers?.get?.('content-type') ?? '').startsWith('text/plain') &&
+    goneOk(htmlGone) &&
+    goneOk(jsonGone);
   report.record(
     'Tunnel identity',
     key,
     identityOk ? PASS : FAIL,
     identityOk
-      ? `/health.json service=${service} environment=development (dev server, not the Worker)`
-      : `/health.json HTTP ${health.status} service=${service ?? '<unparsed>'} (want ${brand}) ` +
-          `environment=${environment ?? '<absent — deployed Worker still owns this hostname>'}`,
+      ? `/health text/plain; /health.html ${htmlGone.status}; /health.json ${jsonGone.status}`
+      : `/health HTTP ${health.status}; /health.html ${htmlGone.status}; /health.json ${jsonGone.status} ` +
+          `(want /health 200 text/plain and the other two 404 HTML)`,
   );
 
   // `/` is a 301 by design, to a hardcoded absolute URL. `net` alone redirects
@@ -1808,8 +1944,9 @@ async function checkTunnelApex(report, surface, base, landing, authHeaders) {
 }
 
 /**
- * `{"service":"app","frame":"info",...}` from a content frame's `/health.json`,
- * or null if the route is absent or answered with something else.
+ * Apex-shaped `{service, frame}` JSON, or null. No surface serves
+ * `/health.json`; a leftover copy would still parse here and FAIL if the brand
+ * did not match.
  */
 function parseSurfaceIdentityJson(body) {
   try {
@@ -1832,10 +1969,9 @@ async function checkTunnelNext(report, surface, base, landing, authHeaders) {
   // return. An ingress entry that sent `info.umaxica.com` to the `app` port
   // would satisfy the check above exactly like a correct one.
   //
-  // `/health.json` closes that with a build-time `service` literal — the same
-  // mechanism the apexes already had. A frame that does not carry the route yet
-  // reports WARN rather than PASS, because "the brand was not checked" and "the
-  // brand is correct" must not look the same in the matrix.
+  // No surface serves `/health.json`. Brand mix-up on a content frame is
+  // therefore UNPROVEN (WARN), not PASS: the HTML cannot distinguish
+  // app/com/org, and `/health` is liveness, not identity.
   const health = await httpGet(`${base}/health.json`, 15_000, authHeaders).catch((e) => ({
     status: 0,
     body: String(e),
@@ -1907,6 +2043,8 @@ const GATE_ORDER = [
   'VPC config',
   'Rails routing',
   'Direct VPC → Rails',
+  'VPC identity',
+  'VPC contract',
   'Local dev server',
   'Local /health',
   'Local /',
@@ -1915,10 +2053,8 @@ const GATE_ORDER = [
   'workerd preview',
   'Preview /health',
   'Preview /',
-  'Preview /health rails',
   'Preview(vpc) /health',
   'Preview(vpc) /',
-  'Preview(vpc) /health rails',
   'Preview → Rails VPC',
   'Host port reachability',
   'Tunnel DNS',
@@ -1937,6 +2073,8 @@ const GATE_ABBREVIATIONS = new Map([
   ['VPC config', 'cfg'],
   ['Rails routing', 'rails'],
   ['Direct VPC → Rails', 'VPC→'],
+  ['VPC identity', 'VPCid'],
+  ['VPC contract', 'VPCct'],
   ['Local dev server', 'dev'],
   ['Local /health', 'd:hlt'],
   ['Local /', 'd:/'],
@@ -2064,13 +2202,23 @@ export async function main(argv = process.argv.slice(2)) {
         await checkToolchain(report, surfaces);
         await modeConfig(report, surfaces, manifest);
       } else if (mode === 'vpc') {
-        await modeVpc(report, surfaces, manifest, { verbose });
+        // The Cores hold no VPC binding (ADR 018), so the probe measures the rest.
+        await modeVpc(
+          report,
+          surfaces.filter((surface) => isVpcSurface(surface, manifest)),
+          manifest,
+          { verbose },
+        );
       } else if (mode === 'next') {
         await modeNext(report, surfaces);
       } else if (mode === 'preview') {
         await modePreview(report, surfaces, { withVpc: false });
       } else if (mode === 'preview:vpc') {
-        await modePreview(report, surfaces, { withVpc: true });
+        await modePreview(
+          report,
+          surfaces.filter((surface) => isVpcSurface(surface, manifest)),
+          { withVpc: true },
+        );
       } else if (mode === 'host') {
         await modeHost(report, surfaces);
       } else if (mode === 'tunnel' || mode === 'tunnel:apex') {

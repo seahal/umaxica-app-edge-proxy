@@ -26,6 +26,8 @@ const repoRoot = join(import.meta.dirname, '..');
 const read = (relativePath: string) => readFileSync(join(repoRoot, relativePath), 'utf8');
 
 const composeBase = read('compose.yaml');
+// `core` moved here so a bare `podman compose up` does not start it.
+const composeDevcontainer = read('.devcontainer/compose.yaml');
 const overrideExample = read('compose.override.yaml.example');
 const devcontainerSource = read('.devcontainer/devcontainer.json');
 const devStart = read('scripts/dev-start');
@@ -101,10 +103,14 @@ describe('optional local Compose override', () => {
     // The bind mounts here carry no `:z`/`:Z` on purpose — those relabel the
     // HOST tree — and `label=disable` is scoped to this one container and is
     // inert on hosts without SELinux, under both Docker and Podman.
-    const core = /^ {2}core:\n((?: {4}.*\n|\n)*)/mu.exec(composeBase)?.[1] ?? '';
+    const core = /^ {2}core:\n((?: {4}.*\n|\n)*)/mu.exec(composeDevcontainer)?.[1] ?? '';
     expect(core).not.toBe('');
     expect(core).toContain('label=disable');
+    // The twenty dev servers are the same image on the same bind, so they need the
+    // same opt-out; they share it through the `*unit` anchor.
+    expect(composeBase).toContain('label=disable');
     expect(directives(composeBase)).not.toMatch(/:\s*[zZ]\b/u);
+    expect(directives(composeDevcontainer)).not.toMatch(/:\s*[zZ]\b/u);
   });
 
   it('never requires the override to exist', () => {
@@ -131,7 +137,11 @@ describe('optional local Compose override', () => {
     // Invariant F. The example is documentation, so it has to stay loadable and
     // has to talk about services that still exist; a stale example is worse
     // than none. It must also stay free of secrets and private keys.
-    const services = [...composeBase.matchAll(/^ {2}([a-z0-9][\w-]*):/gmu)].map((m) => m[1]);
+    // Both files, because `scripts/dev-start` -- the override's main consumer --
+    // loads them together, and `core` is the service the example overrides.
+    const services = [composeBase, composeDevcontainer].flatMap((text) =>
+      [...text.matchAll(/^ {2}([a-z0-9][\w-]*):/gmu)].map((m) => m[1]),
+    );
     const exampleServices = [
       ...directives(overrideExample).matchAll(/^ {2}([a-z0-9][\w-]*):/gmu),
     ].map((m) => m[1]);

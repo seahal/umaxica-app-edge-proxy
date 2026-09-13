@@ -241,19 +241,15 @@ git clone https://github.com/seahal/umaxica-apps-edge.git
 cd umaxica-apps-edge
 docker compose config    # or: podman compose config -- resolves as-is
 
-PODMAN_COMPOSE_PROVIDER=/usr/bin/podman-compose \
-devcontainer up \
-  --docker-path /usr/bin/podman \
-  --docker-compose-path /usr/bin/podman-compose \
-  --workspace-folder .
+scripts/devcontainer-up
 ```
 
-`EDGE_CLOUDFLARED_TOKEN` in the gitignored root `.env` is only needed if you
+`CLOUDFLARED_TOKEN` in the gitignored root `.env` is only needed if you
 actually want the Cloudflare Tunnel connector; without it the connector starts
 with an empty token and everything else is unaffected.
 
-There is no launcher script. `PODMAN_COMPOSE_PROVIDER` and `--docker-path` are
-both mandatory and have no `devcontainer.json` equivalent; run the command as
+The launcher supplies the mandatory Podman options and serializes Dev Container
+Feature builds against the CLI's host-global temporary image name. Run it as
 the normal rootless user, never through `sudo`. See
 [Dev Containers CLI startup on rootless Podman](docs/development/devcontainer-cli-podman-startup.md).
 
@@ -265,29 +261,52 @@ scripts/dev-start [--rails] [--tunnel]
 podman compose exec core bash -l
 ```
 
+#### Running without an editor
+
+`core` is a workspace container: it parks on `sleep infinity` and you start dev
+servers inside it by hand. If you would rather not run an editor at all, each
+workspace unit is also a Compose service of its own, behind the `app` profile:
+
+```bash
+podman compose up                          # the shared services only
+podman compose --profile app up com-apex   # just com/apex, on 5101
+podman compose --profile app up            # all twenty dev servers
+```
+
+Each service runs that unit's own `pnpm run dev` and publishes the port that
+script already binds, so the URLs are the ones in the port table above. A bare
+`podman compose up` deliberately starts no dev server — that is the shape the
+Dev Container needs, and the shape you want before a build or a test run.
+
+`core` and the per-unit services publish the same host ports, so the two shapes
+are mutually exclusive: stop the Dev Container before `--profile app`.
+
 #### The three compose files
 
 ```text
-compose.yaml                   = the complete standard environment
+compose.yaml                   = the shared services, plus the `app` profile
+.devcontainer/compose.yaml     = `core`, the workspace container
 compose.override.yaml          = optional, gitignored, yours
 compose.override.yaml.example  = documented example, tracked
 ```
 
-| File                            | Holds                                                                                                                                                                                 | Edit it?                                   |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `compose.yaml`                  | everything the standard environment needs — the `core` workspace container, the Edge-owned `cloudflare-tunnel` connector, the SELinux `label=disable`, and the `GH_TOKEN` passthrough | only as a change that applies to everyone  |
-| `compose.override.yaml`         | host-specific convenience only — an ssh-agent socket, a `known_hosts` bind, machine-local ports, experiments                                                                          | yes, freely; it is yours and is gitignored |
-| `compose.override.yaml.example` | a documented example of the above                                                                                                                                                     | only to change what the example teaches    |
+| File                            | Holds                                                                                                                                                                                                 | Edit it?                                   |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `compose.yaml`                  | the shared services — the Edge-owned `cloudflare-tunnel` connector, the networks and volumes — plus one dev-server service per workspace unit behind `profiles: [app]`                                | only as a change that applies to everyone  |
+| `.devcontainer/compose.yaml`    | `core`, the workspace container: the SELinux `label=disable`, the twenty published ports, the `GH_TOKEN` passthrough, `sleep infinity`. It lives here so a bare `podman compose up` does not start it | only as a change that applies to everyone  |
+| `compose.override.yaml`         | host-specific convenience only — an ssh-agent socket, a `known_hosts` bind, machine-local ports, experiments                                                                                          | yes, freely; it is yours and is gitignored |
+| `compose.override.yaml.example` | a documented example of the above                                                                                                                                                                     | only to change what the example teaches    |
 
-**A fresh clone needs no override.** `compose.yaml` on its own is a complete,
-supported development environment on Ubuntu, on RHEL/Fedora with SELinux
-Enforcing, under Docker and under rootless Podman. Nothing copies the example
+**A fresh clone needs no override.** `compose.yaml` and
+`.devcontainer/compose.yaml` between them are a complete, supported development
+environment on Ubuntu, on RHEL/Fedora with SELinux Enforcing, under Docker and
+under rootless Podman. Nothing copies the example
 into place, and nothing fails because the override is absent — this is asserted
 by `test/compose-local-override-invariants.test.ts`.
 
 Two consequences of that contract are worth knowing:
 
-- **SELinux lives in `compose.yaml`.** `core` carries
+- **SELinux lives in the tracked compose files.** `core` carries
   `security_opt: [no-new-privileges:true, label=disable]`. The bind mounts here
   deliberately carry no `:z`/`:Z`, which would relabel your host tree;
   `label=disable` is scoped to this one container and is simply ignored on hosts
@@ -296,7 +315,7 @@ Two consequences of that contract are worth knowing:
 - **The Dev Container does not load your override.** The Dev Containers CLI
   passes each `dockerComposeFile` entry to Compose as `-f`, and Compose only
   auto-discovers `compose.override.yaml` when _no_ `-f` is given. So
-  `.devcontainer/devcontainer.json` lists `../compose.yaml` alone, and a bare
+  `.devcontainer/devcontainer.json` lists the two tracked files alone, and a bare
   `docker compose` (auto-discovery) or `scripts/dev-start` (explicit `-f` when
   the file exists) is where an override takes effect. VS Code already forwards
   your ssh-agent into the container for Git on its own.
@@ -384,8 +403,8 @@ via `exec`.
 
 The standard Dev Container starts an Edge-owned Tunnel connector. Put its
 dedicated connector token in the gitignored root `.env` as
-`EDGE_CLOUDFLARED_TOKEN`; this is not a Cloudflare API token and it must not
-be reused from Global. `vpc_services` remains independent and exists only in
+`CLOUDFLARED_TOKEN`; this is not a Cloudflare API token, and it must not be
+the value Global uses for the same variable name in its own `.env`. `vpc_services` remains independent and exists only in
 the explicit `env.vpc` development environment; production remains
 fail-closed.
 

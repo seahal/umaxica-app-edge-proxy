@@ -1,0 +1,158 @@
+# The Dev Container's own half of the development environment.
+#
+# This file holds `core` -- and nothing else. `core` is the workspace container:
+# it exists to be attached to by an editor, it runs `sleep infinity`, and it is
+# useless to anyone who is not opening the Dev Container. Keeping it here rather
+# than in `compose.yaml` is what makes a bare `podman compose up` start the
+# shared services and nothing else.
+#
+# `name:` matches `compose.yaml` on purpose. Compose keys its networks and its
+# named volumes by project name, so the Dev Container, `scripts/dev-start` and a
+# bare `podman compose` still resolve to one set of containers and volumes --
+# the same `pnpm-store`, the same `node-volume`, the same `umaxica-edge-tunnel`.
+#
+# Relative paths still resolve against the repository root, not against this
+# directory: Compose resolves them against the project directory, which is the
+# directory holding the FIRST `-f` file, and `devcontainer.json` lists
+# `../compose.yaml` first. This file is therefore not usable on its own.
+name: umaxica-apps-edge
+
+services:
+  # The workspace container. Every dev server the twenty units define is started
+  # BY HAND inside it, which is why it publishes all twenty ports and parks PID 1
+  # on `sleep infinity`.
+  core:
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        CONTAINER_UID: 1000
+        CONTAINER_GID: 1000
+        CONTAINER_USER: edge
+        CONTAINER_GROUP: edge
+    working_dir: /home/edge/workspace
+    volumes:
+      - type: bind
+        source: .
+        target: /home/edge/workspace
+        consistency: cached
+      - type: volume
+        source: node-volume
+        target: /home/edge/workspace/node_modules
+        volume:
+          nocopy: true
+      - type: volume
+        source: home-cache
+        target: /home/edge/.cache
+      - type: volume
+        source: pnpm-store
+        target: /home/edge/.local/share/pnpm/store
+      # The tailnet node's identity, for the interactive `tailscale up` the image
+      # ships a wrapper for. Surviving a container recreate is the whole point:
+      # without it every start registers a NEW node and the tailnet name drifts
+      # to umaxica-edge-core-1, -2, ... `down --volumes` destroys it and the next
+      # `tailscale up` enrols afresh.
+      - type: volume
+        source: tailscale-state
+        target: /home/edge/.local/state/tailscale
+      - type: volume
+        source: workspace-secrets-mask
+        target: /home/edge/workspace/.secrets
+        read_only: true
+        volume:
+          nocopy: true
+    ports:
+      - '127.0.0.1:5101:5101' # com/apex
+      - '127.0.0.1:5103:5103' # com/info
+      - '127.0.0.1:5105:5105' # com/core
+      - '127.0.0.1:5106:5106' # com/docs
+      - '127.0.0.1:5107:5107' # com/news
+      - '127.0.0.1:5108:5108' # com/help
+      - '127.0.0.1:5201:5201' # net/apex
+      - '127.0.0.1:5301:5301' # org/apex
+      - '127.0.0.1:5303:5303' # org/info
+      - '127.0.0.1:5305:5305' # org/core
+      - '127.0.0.1:5306:5306' # org/docs
+      - '127.0.0.1:5307:5307' # org/news
+      - '127.0.0.1:5308:5308' # org/help
+      - '127.0.0.1:5401:5401' # app/apex
+      - '127.0.0.1:5403:5403' # app/info
+      - '127.0.0.1:5405:5405' # app/core
+      - '127.0.0.1:5406:5406' # app/docs
+      - '127.0.0.1:5407:5407' # app/news
+      - '127.0.0.1:5408:5408' # app/help
+      - '127.0.0.1:5501:5501' # dev/apex
+      # Browser OAuth callback for `wrangler login`. Cloudflare credentials are
+      # now obtained interactively inside the container instead of being
+      # injected as a long-lived API token, so this port is part of the base
+      # environment rather than an opt-in credential overlay.
+      - '127.0.0.1:8976:8976' # wrangler login callback
+    command: sleep infinity
+    tty: true
+    stdin_open: true
+    init: true
+    # `keep-id:uid=1000,gid=1000` rather than a bare `keep-id`: the host user is
+    # mapped to 1000 INSIDE the container whatever its host id is, which is the
+    # id the image bakes into /home/edge. A bare `keep-id` passes the host id
+    # through unchanged, so a host whose uid is not 1000 gets a home and a
+    # workspace owned by the wrong user -- which is why this used to need a
+    # host-side hook writing the real ids into `.env` before every build.
+    # Pinning both ends removes that bootstrap entirely.
+    userns_mode: keep-id:uid=1000,gid=1000
+    security_opt:
+      - no-new-privileges:true
+      # SELinux Enforcing (Fedora/RHEL) 対応。標準環境の成立条件なので、
+      # ローカル override ではなくこちらに置く。
+      #
+      # このファイルの bind mount はワークスペースを渡す `.` の 1 本だけで、
+      # :z / :Z を付けていない。ホスト側リポジトリは user_home_t の
+      # ままなので container_t のコンテナからは読めない。uid/gid は keep-id で
+      # 一致していて DAC は通っており、落ちているのは MAC の側だけ
+      # (`ls /home/edge/workspace` がディレクトリ一覧すら出せない)。
+      #
+      # :z を付ける手もあるが、それはホスト側リポジトリを
+      # container_file_t へ「再ラベル」してしまう。label=disable はこの
+      # コンテナ 1 つに閉じ、ホストのラベルを一切書き換えないのでこちらを取る。
+      # SELinux を使っていないホスト (Ubuntu 等) では Docker / Podman とも
+      # 単に無視されるため、無条件に置いて安全。
+      - label=disable
+    cap_drop:
+      - ALL
+    environment:
+      CLOUDFLARE_ENV: development
+      # gh CLI の API 認証。トークン本体はこのファイルに書かず、ホスト側の
+      # 環境変数からそのまま引き渡す。gh のトークン解決順は
+      # GH_TOKEN > GITHUB_TOKEN > 設定ファイル なので、イメージ側に失効した
+      # トークンが残っていてもこちらが必ず勝つ。gh auth login は不要。
+      #
+      # `:?` ではなく `:-` なのが要点。Compose は起動するサービスに関係なく
+      # ファイル全体を補間するため、`:?` にするとトークンを持たないマシンでは
+      # `compose config` ごと止まる。gh は空文字を「未設定」として扱い
+      # hosts.yml へフォールバックするので、空のまま渡して無害。
+      GH_TOKEN: ${GH_TOKEN:-}
+      # Read only by `tools/verify-edge-connectivity.mjs` as an "am I inside the
+      # container" hint, alongside its `/.dockerenv` fallback. It is a property of
+      # this service rather than of the editor attached to it, so it belongs here
+      # rather than in an overlay only VS Code loads.
+      DEVCONTAINER: '1'
+    # `default` is written out rather than left implicit: a service-level
+    # `networks:` list REPLACES the implicit membership instead of merging with
+    # it, so omitting it would detach `core` from this project's own network.
+    #
+    # `edge.localhost` is the address the Global/Rails Cloudflare Tunnel
+    # connector names in its ingress rules, and it has to be unambiguous. Podman
+    # registers the service name as an alias on every network a container joins,
+    # so a rule naming `core` would resolve on this network AND on Global's
+    # `frontend` (where Rails' own `core` lives), resolution-order-dependent —
+    # the failure the Global repository recorded in
+    # `notes/implementation/2026-08-11-cloudflare-tunnel-edge-network-join.md`.
+    #
+    # One alias covers every unit because this container serves all twenty on
+    # their own ports. Rails needs one alias per surface only because it
+    # distinguishes them by Host on a single port.
+    networks:
+      default: {}
+      edge-tunnel:
+        aliases:
+          - edge.localhost
+    restart: unless-stopped

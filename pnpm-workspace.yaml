@@ -35,36 +35,13 @@ allowBuilds:
   workerd: true
 
 catalog:
-  # Astro and its Cloudflare adapter. Pilot scope only: the twelve content
-  # frames (info/news/docs/help × app/com/org) move from TanStack Start to Astro
-  # SSG per plans/tanstack-start-agile-reddy.md. `astro` is a devDependency —
-  # `astro build` emits static HTML + a Worker bundle for the on-demand
-  # endpoints; nothing Astro ships runs in the request path for a static page.
-  # The adapter targets Cloudflare Workers (Pages is unsupported). Pinned here
-  # so the twelve frames cannot drift onto different Astro versions.
-  '@astrojs/cloudflare': ^14.2.5
-  # The Cloudflare Vite plugin. It runs the Worker inside workerd during `vite
-  # dev` and owns the production build: `vite build` emits the Worker bundle,
-  # the client assets and an OUTPUT `wrangler.json` whose `assets.directory`
-  # points at the client build. That is why no apex `wrangler.jsonc` declares
-  # `assets.directory` any more, and why `wrangler deploy` must not be passed
-  # `--config` — it reads the generated config out of the build output.
-  #
-  # Its peer range pins wrangler at ^4.127.0, which is what moved the wrangler
-  # entry below off ^4.126.0.
-  '@cloudflare/vite-plugin': ^1.54.1
-  '@cloudflare/workers-types': ^5.20260827.1
-  # Inter, self-hosted. The CSP is `font-src 'self' data:`, so a CDN is not an
-  # option: this package ships the woff2 files and the `@font-face` rules, which
-  # Vite fingerprints into the client build like any other asset. All fifteen
-  # frames install it; the five apex Workers render with hono/jsx and load no
-  # webfont at all.
+  '@astrojs/cloudflare': 14.3.1
+  # React islands on the twelve Astro publishing homes. Pinned next to Astro so
+  # the content surfaces cannot drift onto an integration the 7.3 line rejects.
+  '@astrojs/react': 6.0.5
+  '@cloudflare/vite-plugin': ^1.54.3
+  '@cloudflare/workers-types': ^5.20260903.1
   '@fontsource-variable/inter': ^5.3.0
-  # The Hono structured-logger middleware, wired in every apex Worker's
-  # create-apex-app.ts. Five units, one version — catalogued for the same reason
-  # as everything else here: nothing but this file can hold them together, and a
-  # logger that emits a different JSON shape per surface defeats the point of
-  # `observability.logs.enabled` collecting them into one stream.
   '@hono/structured-logger': ^1.0.0
   # Hurl is a Rust binary; this package is the official npm distribution of it
   # (bins `hurl` and `hurlfmt`). Installing it as a devDependency rather than
@@ -116,9 +93,9 @@ catalog:
   # here changes what a test MEANS rather than whether it runs.
   '@testing-library/jest-dom': ^7.0.1
   '@testing-library/react': ^16.3.3
-  '@types/node': ^26.4.0
+  '@types/node': ^26.5.1
   '@types/react': ^19.2.18
-  '@types/react-dom': ^19.2.5
+  '@types/react-dom': ^19.2.7
   # React Fast Refresh and the JSX transform for the Vite-built units. The five
   # apex Workers do not install it — they render with hono/jsx and have no React
   # at all (docs/design/ui-shell-contract.md §3a).
@@ -126,28 +103,28 @@ catalog:
   # Exact, not a range, and deliberately so: V8 coverage remapping has to match
   # the vitest it instruments, and this was already an exact literal in all
   # twenty-two manifests. Catalogued to keep it that way from one place.
-  '@vitest/coverage-v8': 4.1.11
+  '@vitest/coverage-v8': 5.0.0
   # The spell checker. Pinned here rather than per unit because the dictionary
   # it reads (.cspell/project-words.txt) is repository-wide: a unit resolving a
   # different major could disagree about what the config file even means.
   # Astro (unscoped). See '@astrojs/cloudflare' above for the pilot rationale.
-  astro: ^7.2.9
-  cspell: ^10.1.1
+  astro: 7.3.2
+  cspell: ^10.3.0
   dependency-cruiser: ^18.2.0
-  happy-dom: ^20.11.15
-  hono: ^4.13.5
-  knip: ^6.33.0
+  happy-dom: ^20.13.2
+  hono: ^4.13.7
+  knip: ^6.35.1
   # The static analysis toolchain. These were literal strings in twenty-two
   # manifests until they drifted (knip sat at 6.32.1 in every unit and 6.32.2 at
   # the root), which is exactly the failure a catalog exists to prevent: a lint
   # or type rule that fires in CI and not on a developer's machine is worse than
   # the rule being off. oxlint and oxlint-tsgolint in particular have to move
   # together — tsgolint is the type-aware backend oxlint shells out to.
-  oxfmt: ^0.65.0
-  oxlint: 1.80.0
+  oxfmt: ^0.67.0
+  oxlint: 1.82.0
   oxlint-tsgolint: ^7.0.2001
   react: ^19.2.8
-  react-aria-components: ^1.20.0
+  react-aria-components: ^1.21.0
   react-dom: ^19.2.8
   # The frontend performance budget runner. See '@size-limit/file' above for why
   # the two move together and why no preset is used.
@@ -177,11 +154,11 @@ catalog:
   # Vitest already resolves a transitive copy of Vite; this entry is the direct,
   # version-pinned one, so the two cannot disagree about which major is in play.
   vite: ^8.2.2
-  vitest: ^4.1.11
+  vitest: ^5.0.0
   # Floor set by `@cloudflare/vite-plugin`'s peer range (^4.127.0), not chosen
   # independently. Bumping the plugin without bumping this is a resolution
   # failure rather than a subtle one.
-  wrangler: ^4.127.1
+  wrangler: ^4.131.1
 
 ignoredBuiltDependencies:
   - esbuild
@@ -220,11 +197,23 @@ minimumReleaseAgeIgnoreMissingTime: false
 # "whatever is newest". Re-check when bumping — an entry kept past its bump is
 # a standing hole.
 #
-# `wrangler@4.120.1` was dropped when the catalog floor moved to ^4.124.0 for
-# `@cloudflare/vite-plugin`'s peer range: 4.124.0 cleared the delay on its own,
-# so the exception had nothing left to except.
-minimumReleaseAgeExclude:
-  - miniflare@5.20260804.0-alpha
+# Empty today, and every removal was a version clearing the delay on its own
+# rather than the policy being relaxed:
+#
+#   wrangler@4.120.1              the catalog floor moved to ^4.124.0 for
+#                                 `@cloudflare/vite-plugin`'s peer range, and
+#                                 4.124.0 was already aged.
+#   miniflare@5.20260804.0-alpha  the lockfile resolves 5.20260831.0-alpha; the
+#                                 pinned version was not installed any more, so
+#                                 the entry excepted nothing.
+#   astro@7.3.1                   published 2026-09-03T13:29Z.
+#   @astrojs/cloudflare@14.3.0    published 2026-09-03T10:29Z.
+#   vitest@5.0.0 / @vitest/*      published 2026-09-03T12:24Z.
+#
+# The last three aged past the 1440-minute window on 2026-09-04, which is what
+# their own comments said to wait for. Verified by `pnpm install` re-checking
+# all 854 lockfile entries against the policy with this list empty.
+minimumReleaseAgeExclude: []
 
 audit:
   ignore:

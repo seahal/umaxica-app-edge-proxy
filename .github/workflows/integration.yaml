@@ -286,6 +286,23 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test
 
+  # Shuffled-order run of the same suites, as a separate job so the fast `test`
+  # gate above is never slowed by it. Shuffles file and within-file test order
+  # (not `test.concurrent` — see evidence/2026-09-07-vitest-hardening.md) to
+  # catch order dependence, module-state leakage and global leakage. A failure
+  # here is a shared-state defect in a test, not a reason to add a retry.
+  test-stress:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/setup@v2
+        with:
+          cache: true
+          install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:stress
+
   # The browser bundle budget. This job builds, but building is the *means*,
   # not the question: "does it build?" is already answered by Cloudflare, which
   # runs Workers Builds on every push — including non-production branches, where

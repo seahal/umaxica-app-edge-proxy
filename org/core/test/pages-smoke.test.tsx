@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { defaultLocale } from '@/i18n/config';
 import { getDictionary } from '@/i18n/dictionaries';
 
+import { resetEnv, setEnv } from './__mocks__/cloudflare-workers';
 import { renderDocument } from './utils/routes';
 
 /*
@@ -21,10 +22,18 @@ const PAGES = [
   ['/configuration', '/configuration'],
   ['/configuration/account', '/configuration/account'],
   ['/doctor', '/doctor'],
+  ['/publishing', '/publishing'],
 ] as const;
 
 describe('page smoke', () => {
+  afterEach(() => {
+    resetEnv();
+  });
+
   it.each(PAGES)('%s renders a document with one main landmark', async (_label, path) => {
+    if (path === '/publishing') {
+      setEnv({ RAILS_STAFF_BASE_ORIGIN: 'https://www.umaxica.org' });
+    }
     const html = await renderDocument(path);
 
     expect(html).toContain('<html');
@@ -55,7 +64,11 @@ describe('page smoke', () => {
     ['/configuration', 'configuration'],
     ['/configuration/account', 'configuration_account'],
     ['/doctor', 'doctor'],
+    ['/publishing', 'publishing'],
   ] as const)('%s renders its own heading', async (path, key) => {
+    if (path === '/publishing') {
+      setEnv({ RAILS_STAFF_BASE_ORIGIN: 'https://www.umaxica.org' });
+    }
     const dict = await getDictionary(defaultLocale);
     const html = await renderDocument(path);
     const heading = /<h1[^>]*>([^<]+)<\/h1>/u.exec(html)?.[1] ?? '';

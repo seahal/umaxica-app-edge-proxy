@@ -101,7 +101,7 @@ describe('apex CSRF environment gate', () => {
      * wrong reason.
      */
     request.headers.set('Origin', origin);
-    return createApexApp(() => undefined, { service: 'net' }).request(request, undefined, env);
+    return createApexApp(() => undefined).request(request, undefined, env);
   };
 
   it('refuses the local dev origin once EDGE_ENV says production', async () => {

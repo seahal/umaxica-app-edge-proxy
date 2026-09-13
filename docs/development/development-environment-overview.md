@@ -10,23 +10,21 @@ API) as standard, plus — only if the developer opts in through the optional
 `known_hosts`. No key material crosses any of them — see
 [Git and GitHub access](git-and-github-access.md).
 
-`compose.yaml` alone is a complete standard environment: a fresh clone starts with no
+`compose.yaml` plus `.devcontainer/compose.yaml` are a complete standard environment: a
+fresh clone starts with no
 local file created.
 
 ## Dev Container startup
 
-After setting the Edge-specific `EDGE_CLOUDFLARED_TOKEN` in the gitignored root `.env`, start the
+After setting this repository's own `CLOUDFLARED_TOKEN` in the gitignored root `.env`, start the
 Dev Container through Dev Containers CLI, from the repository root:
 
 ```bash
-PODMAN_COMPOSE_PROVIDER=/usr/bin/podman-compose \
-devcontainer up \
-  --docker-path /usr/bin/podman \
-  --docker-compose-path /usr/bin/podman-compose \
-  --workspace-folder .
+scripts/devcontainer-up
 ```
 
-There is no launcher script; the command line is the whole integration surface, and none of it
+The launcher is the CLI integration surface. It serializes the CLI's fixed-name temporary
+Feature image across cooperating repositories; none of its Podman options
 can move into `devcontainer.json`. `--docker-path` selects the engine, and
 `PODMAN_COMPOSE_PROVIDER` selects the Compose implementation: with Podman as the engine the
 CLI invokes `podman compose`, which delegates to an external provider and prefers
@@ -50,7 +48,7 @@ scripts/dev-start --tunnel
 scripts/dev-start --rails --tunnel
 ```
 
-The Tunnel modes require `EDGE_CLOUDFLARED_TOKEN` in the gitignored root `.env`. It is a scoped
+The Tunnel modes require `CLOUDFLARED_TOKEN` in the gitignored root `.env`. It is a scoped
 connector token for the Edge-specific Tunnel, not an API token, and must not match Global's token.
 `--rails` joins an
 existing rootless Podman network named by `EDGE_RAILS_NETWORK`; it never creates or

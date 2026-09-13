@@ -128,18 +128,11 @@ xpath "normalize-space(//footer//nav//a)" == "このサイトについて"
 xpath "normalize-space(//a[@href='#main-content'])" == "本文へスキップ"
 
 
-# `/health` is outside the shell. It is a health check, not a page.
-GET {{base}}/health
-HTTP 200
+# `/health.html` is not a page. It is the same 404 document as any other miss.
+GET {{base}}/health.html
+HTTP 404
 [Asserts]
+header "content-type" == "text/html; charset=UTF-8"
+header "content-type" not contains "json"
 xpath "count(//header)" == 0
 xpath "count(//nav)" == 0
-xpath "count(//footer//nav)" == 0
-xpath "count(//a[@href='/about'])" == 0
-# No skip link either, and that is right rather than an omission: there is no
-# header and no navigation here to skip past, and a skip link on a document
-# with no chrome is a control that does nothing.
-xpath "count(//a[@href='#main-content'])" == 0
-# Chrome-free, not unstyled: it links the same compiled stylesheet.
-xpath "count(//link[@rel='stylesheet'])" == 1
-xpath "string(//link[@rel='stylesheet']/@href)" matches /^\/[^"]+\.css(\?[^"]*)?$/

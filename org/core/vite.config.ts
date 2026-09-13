@@ -33,87 +33,23 @@ import { defineConfig } from 'vite';
  * `viteEnvironment: { name: 'ssr' }` is what the Cloudflare framework guide
  * requires so TanStack Start's server build targets the Worker environment.
  */
-/*
- * The two flags that select the direct Rails transport in
- * `src/lib/rails-client.ts`, bridged from the shell into the Worker.
- *
- * `vite dev` runs the Worker in workerd, whose `process.env` is built from the
- * Worker's own vars and NOT from the shell — so `EDGE_LOCAL_NODE_RUNTIME=1` in
- * the dev script and `EDGE_LOCAL_RAILS_ENABLED` from the container-wide Rails
- * overlay do not reach it on their own. Measured 2026-08-22: with
- * both exported, `/health` still reported `not-configured`, meaning the local
- * branch was never taken.
- *
- * This config file runs in Node, where the shell environment IS visible, so it
- * is the one place that can carry them across. Only names that are already set
- * are forwarded, so an unset overlay stays unset and the client keeps failing
- * closed to `not-configured` rather than being handed a transport it was not
- * granted.
- *
- * **The forwarding happens only while SERVING, never while building**, and that
- * guard is load-bearing rather than tidiness. `compose.yaml` exports
- * `EDGE_LOCAL_RAILS_ENABLED` container-wide, so without it a `pnpm run build`
- * run inside the development container baked both flags into the production
- * artefact — measured 2026-08-22, they appeared in `dist/server/wrangler.json`
- * under `vars`. A deployed production Worker carrying them would take the direct
- * transport to a `.localhost` origin instead of the VPC binding, and answer
- * `unreachable` forever rather than reaching Rails.
- */
-const LOCAL_RAILS_FLAGS = ['EDGE_LOCAL_NODE_RUNTIME', 'EDGE_LOCAL_RAILS_ENABLED'] as const;
-
-// Mutated in place rather than returned as a new object: the plugin MERGES what
-// the customizer returns into the config it passed in, so `{ ...config }` comes
-// back with `compatibility_flags` concatenated onto itself and workerd refuses to
-// start — "Compatibility flag specified multiple times: nodejs_compat".
-function forwardLocalRailsFlags(config: { vars?: Record<string, unknown> }): void {
-  for (const name of LOCAL_RAILS_FLAGS) {
-    const value = process.env[name];
-    if (value === undefined) continue;
-    config.vars = { ...config.vars, [name]: value };
-  }
-}
-
-/*
- * `remoteBindings` is load-bearing, not a default being restated.
- *
- * The plugin defaults it to TRUE. A Workers VPC Service has no local simulator,
- * so with the default, any command that resolves a configuration declaring
- * `vpc_services` opens a remote proxy session against Cloudflare — and that
- * session cannot be authenticated with an API token, only with an interactive
- * `wrangler login`. This Worker declares the binding at the top level (which IS
- * production) and in `env.development` and `env.vpc`, so `vite preview` — which
- * reads the built production config — failed outright without credentials:
- *
- *   In a non-interactive environment, it's necessary to set a
- *   CLOUDFLARE_API_TOKEN environment variable for wrangler to work
- *
- * Measured 2026-08-22.
- *
- * `env.vpc` is the one tier whose entire purpose is the real remote binding, so
- * it is the one tier that opts back in — and `pnpm dev:vpc` is documented as
- * needing `wrangler login`. Everything else, including CI, stays credential-free.
- */
-const wantsRemoteBindings = process.env['CLOUDFLARE_ENV'] === 'vpc';
-
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   // The core's pages and components import through `@/`, declared in its own
   // tsconfig. Vite resolves it from there rather than from a second list here.
   resolve: { tsconfigPaths: true },
   // The Cloudflare Tunnel forwards the browser's Host unchanged, so `vite dev`
   // sees the public hostname and refuses it: Vite allowlists Hosts to block DNS
-  // rebinding against a dev server. Only this unit's own tunnel hostname is
+  // rebinding against a dev server. Only this unit's own two tunnel hostnames are
   // listed — never `true` and never a wildcard, which would give that defence
   // up. `server` is read while serving only, so `vite build` is unaffected.
-  server: { allowedHosts: ['us.umaxica.org'] },
+  server: { allowedHosts: ['jp.umaxica.org', 'us.umaxica.org'] },
   plugins: [
     tailwindcss(),
     cloudflare({
       inspectorPort: 9305,
       viteEnvironment: { name: 'ssr' },
-      remoteBindings: wantsRemoteBindings,
-      ...(command === 'serve' ? { config: forwardLocalRailsFlags } : {}),
     }),
     tanstackStart(),
     viteReact(),
   ],
-}));
+});

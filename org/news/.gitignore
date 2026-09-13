@@ -2,5 +2,3 @@
 cloudflare-env.d.ts
 dist
 node_modules
-# Astro pilot — generated, like cloudflare-env.d.ts (adr/013 / plan Phase 1)
-.astro

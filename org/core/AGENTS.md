@@ -21,9 +21,14 @@ current documentation rather than working from memory:
 
 ## What is load-bearing here
 
+- **Health is four `text/plain` server routes**, not JSON and not a React page:
+  `/health` (human aggregate), `/health/startups`, `/health/livenesses`,
+  `/health/readinesses`. They skip the generic rate limiter (exact pathname
+  only). Rails JSON under `/health/*.json` stays blocked in `core-dispatch.ts`.
 - **`src/worker.ts` is the entrypoint, not the framework.** wrangler's `main` is
   this file. It classifies the path, rate-limits once, dispatches Rails-owned
-  paths over the VPC binding, and strips `Cookie` in and `Set-Cookie` out around
+  paths to Rails at `RAILS_ORIGIN` over the public internet (no Workers VPC —
+  `adr/018-core-rails-direct-internet.md`), and strips `Cookie` in and `Set-Cookie` out around
   whatever answers the rest — `adr/007-shared-fqdn-core-dispatch.md`. The
   migration did not change it; it changed who "the rest" is. That seam is
   `src/lib/app-handler.ts`, which is why `worker.ts` names a module rather than a
@@ -56,15 +61,11 @@ current documentation rather than working from memory:
   for the caller to throw. Do not widen that scope, and do not add an inline
   directive — the rule is type-aware only, so `pnpm run lint` would report the
   directive itself as unused.
-- **`vite.config.ts` forwards `EDGE_LOCAL_*` only while serving.** `vite dev`
-  runs the Worker in workerd, whose `process.env` comes from the Worker's own
-  vars rather than the shell, so the flags have to be bridged — but forwarding
-  them during a build bakes them into the production artefact, and a deployed
-  Worker carrying them would take the direct transport to a `.localhost` origin
-  and report `unreachable` forever.
-- **`remoteBindings` is false unless `CLOUDFLARE_ENV=vpc`.** A Workers VPC
-  Service has no local simulator, so the default (`true`) makes every command
-  demand an interactive `wrangler login`.
+- **Rails is `RAILS_ORIGIN` in `wrangler.jsonc`, per tier — never a constant in
+  code.** `src/lib/rails-origin.ts` accepts a bare https origin, or plain http
+  only for a `*.localhost` host; anything else is "not configured" and fails
+  closed to 503. No tier names one yet; locally, set it in `.dev.vars` (see
+  `.dev.vars.example`).
 - **No `assets.directory` in `wrangler.jsonc`.** `vite build` writes it into the
   output config; see `adr/012-apex-vite-build-and-static-assets.md`.
 

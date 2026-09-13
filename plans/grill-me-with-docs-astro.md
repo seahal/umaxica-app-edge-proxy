@@ -2,7 +2,10 @@
 
 ## Status
 
-Implementation prompt / working plan. **Astro / Edge side only. Do not modify the Rails repository.**
+Superseded as the active working note. Framework cutover is done (`adr/015`).
+**Remaining document-CMS work:** [`astro-content-surfaces-remaining.md`](./astro-content-surfaces-remaining.md).
+
+Original implementation prompt / working plan below. **Astro / Edge side only. Do not modify the Rails repository.**
 
 This plan covers migrating the public content surfaces in `seahal/umaxica-apps-edge` from TanStack Start to Astro:
 

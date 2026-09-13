@@ -6,9 +6,10 @@ import { expectTitleContract } from './utils/title-contract';
 /*
  * The `<title>` contract on the one document no HTTP client can ask for.
  *
- * `/about`, `/health`, `/health.html`, `/offline` and the 404 are checked
- * against real responses in `api/title-contract.hurl`, along with the rule that
- * the JSON surfaces stay untouched. The 500 document needs a route that throws,
+ * `/about`, `/health`, `/offline` and the 404 (including `/health.html` and
+ * `/health.json`) are checked against real responses in
+ * `api/title-contract.hurl`. Those two paths are HTML 404, not health
+ * documents. The 500 document needs a route that throws,
  * so it stays here — and it is the case most likely to break, because it is
  * built by a string literal in `create-apex-app.ts` rather than by the renderer
  * every other page goes through.
@@ -18,14 +19,11 @@ import { expectTitleContract } from './utils/title-contract';
  */
 describe('apex 500 document', () => {
   it('serves a contract-conforming title', async () => {
-    const boom = createApexApp(
-      (pageRoutes) => {
-        pageRoutes.get('/boom', () => {
-          throw new Error('induced failure');
-        });
-      },
-      { service: 'app' },
-    );
+    const boom = createApexApp((pageRoutes) => {
+      pageRoutes.get('/boom', () => {
+        throw new Error('induced failure');
+      });
+    });
 
     const response = await boom.request('/boom', {}, { CF_VERSION_METADATA: {} });
     expect(response.status).toBe(500);

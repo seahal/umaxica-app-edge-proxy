@@ -53,23 +53,31 @@ describe('status surfaces', () => {
     }
   });
 
-  it('returns revision metadata and falls back when the environment is unavailable', async () => {
+  it('returns revision text and JSON from the same version metadata', async () => {
     setEnv({ REVISION: { id: 'id-1', tag: 'tag-1', timestamp: 'ts-1' } });
     const withMeta = await handlers.revision();
     expect(withMeta.status).toBe(200);
     expect(withMeta.headers.get('Cache-Control')).toBe('no-store');
     expect(withMeta.headers.get('X-Robots-Tag')).toBe('noindex, nofollow');
-    await expect(withMeta.json()).resolves.toEqual({ id: 'id-1', tag: 'tag-1', timestamp: 'ts-1' });
+    expect(withMeta.headers.get('Content-Type')).toMatch(/^text\/plain\b/u);
+    await expect(withMeta.text()).resolves.toBe('id-1\n');
+    await expect((await handlers.revisionApi()).json()).resolves.toEqual({
+      id: 'id-1',
+      tag: 'tag-1',
+      timestamp: 'ts-1',
+    });
 
     setEnv({});
-    await expect((await handlers.revision()).json()).resolves.toEqual({
+    await expect((await handlers.revision()).text()).resolves.toBe('unknown\n');
+    await expect((await handlers.revisionApi()).json()).resolves.toEqual({
       id: null,
       tag: null,
       timestamp: null,
     });
 
     setEnvShouldThrow(true);
-    await expect((await handlers.revision()).json()).resolves.toEqual({
+    await expect((await handlers.revision()).text()).resolves.toBe('unknown\n');
+    await expect((await handlers.revisionApi()).json()).resolves.toEqual({
       id: null,
       tag: null,
       timestamp: null,

@@ -40,6 +40,9 @@ The list `/adr/` owns; reproduced here only because plan notes cross-reference i
 | [008](../adr/008-edge-development-tunnel-exposure.md)                 | Complete                              | Edge development surfaces via the Rails-owned Tunnel   |
 | [009](../adr/009-rails-health-entrypoint-and-dispatch-operability.md) | Implemented                           | One health entry point, and an operable Rails dispatch |
 | [010](../adr/010-first-touch-rate-limiting.md)                        | Implemented                           | Rate limiting happens once, at first touch             |
+| [015](../adr/015-public-content-surfaces-astro.md)                    | Accepted; document layer remaining    | Twelve public surfaces run Astro                       |
+
+Remaining Astro document-CMS work (not a new ADR): [`astro-content-surfaces-remaining.md`](./astro-content-surfaces-remaining.md).
 
 Issue links, where they exist:
 [#247](https://github.com/seahal/umaxica-apps-edge/issues/247) (001),

@@ -16,6 +16,9 @@ umaxica
 mslo
 Junio
 Hamano
+umaxicaappsglobaldc  # Compose project name Podman derives from the sibling
+                     # Global/Rails repository's directory name, quoted
+                     # verbatim from an observed tunnel-connector conflict
 
 # --- Cloudflare and the Workers runtime ---
 workerd
@@ -33,6 +36,7 @@ syncpackrc
 smol        # smol-toml, an advisory floor in pnpm-workspace.yaml
 endoflife   # endoflife.date
 jscoverage
+Pagy        # Rails offset-pagination gem; Edge forwards page numbers only
 GHSA        # GitHub advisory identifiers
 qqqr        # ...and a fragment of one: GHSA-8988-4f7v-96qf's neighbour
 

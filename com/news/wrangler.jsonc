@@ -1,27 +1,25 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "umaxica-apps-edge-com-news",
-  "main": "./src/server.ts",
   "workers_dev": true,
   "compatibility_date": "2026-05-13",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "version_metadata": {
     "binding": "REVISION"
   },
+  // TanStack Start's server entry, wrapped by `src/request-handler.ts`.
+  "main": "./src/server.ts",
   // No `directory` and no `binding`: this is the INPUT config, and `vite build`
   // writes an output wrangler.json whose `assets.directory` points at the client
-  // build. Setting it here would describe a directory the deployed Worker never
-  // uses, and `wrangler deploy` must not be passed `--config` for the same
-  // reason. See adr/012-apex-vite-build-and-static-assets.md.
+  // build. See adr/012-apex-vite-build-and-static-assets.md.
   //
   // Nothing reads an ASSETS binding: assets are matched by Cloudflare BEFORE the
   // Worker runs, so the Worker never has to serve one itself.
   //
-  // `html_handling: "none"` keeps `/` reachable. Cloudflare matches assets
-  // first, so a stray index.html in the build output could answer `/` in place
-  // of the index route — silently, and only in production.
-  // `not_found_handling: "none"` lets the Worker produce the 404 document, which
-  // is what carries the title and the security headers.
+  // `html_handling: "none"` keeps `/` reachable: every HTML document is rendered
+  // by the Worker, and a stray index.html in the build output must never answer
+  // in place of a route. `not_found_handling: "none"` lets the Worker produce the
+  // 404 document, which is what carries the title and the security headers.
   // `run_worker_first` is deliberately NOT set: it would invoke the Worker for
   // every asset request, turning free static-asset serving into billed
   // invocations.
@@ -51,7 +49,8 @@
   "vars": {
     "EDGE_ENV": "production",
     "NODE_ENV": "production",
-    "BRAND_NAME": "UMAXICA"
+    "BRAND_NAME": "UMAXICA",
+    "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
   },
 
   // BOOTSTRAP: production points at the DEVELOPMENT VPC Service, on purpose.
@@ -75,7 +74,7 @@
   "vpc_services": [
     {
       "binding": "UMAXICA_APPS_EDGE_CF_WORKERS_VPC",
-      "service_id": "019f5fe0-287f-7040-9f2f-036cb5b21df7"
+      "service_id": "01a06fd0-89b7-7613-9e1d-f7d07c693273"
     }
   ],
 
@@ -92,7 +91,7 @@
     // Rails is reached instead through the direct transport
     // in `src/lib/rails-client.ts`, gated on EDGE_LOCAL_NODE_RUNTIME +
     // EDGE_LOCAL_RAILS_ENABLED, over the private Podman network. Measured
-    // 2026-08-22: workerd reaches `http://news.com.localhost:<port>` with
+    // 2026-08-22: workerd reaches `http://docs.app.localhost:<port>` with
     // `global_fetch_strictly_public` set, so that flag needs no exception here.
     //
     // Never deployed. It carries its own rate-limit namespace rather than none:
@@ -105,7 +104,8 @@
       "vars": {
         "EDGE_ENV": "local",
         "NODE_ENV": "development",
-        "BRAND_NAME": "UMAXICA"
+        "BRAND_NAME": "UMAXICA",
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"
@@ -113,7 +113,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "5002",
+          "namespace_id": "5001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -125,7 +125,8 @@
       "vars": {
         "EDGE_ENV": "development",
         "NODE_ENV": "development",
-        "BRAND_NAME": "UMAXICA"
+        "BRAND_NAME": "UMAXICA",
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       // The ordinary development loop reaches Rails over the real binding.
       //
@@ -151,7 +152,7 @@
       "vpc_services": [
         {
           "binding": "UMAXICA_APPS_EDGE_CF_WORKERS_VPC",
-          "service_id": "019f5fe0-287f-7040-9f2f-036cb5b21df7",
+          "service_id": "01a06fd0-89b7-7613-9e1d-f7d07c693273",
           "remote": true
         }
       ],
@@ -161,7 +162,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "2002",
+          "namespace_id": "2001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -177,7 +178,8 @@
       "vars": {
         "EDGE_ENV": "vpc",
         "NODE_ENV": "development",
-        "BRAND_NAME": "UMAXICA"
+        "BRAND_NAME": "UMAXICA",
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"
@@ -185,14 +187,14 @@
       "vpc_services": [
         {
           "binding": "UMAXICA_APPS_EDGE_CF_WORKERS_VPC",
-          "service_id": "019f5fe0-287f-7040-9f2f-036cb5b21df7",
+          "service_id": "01a06fd0-89b7-7613-9e1d-f7d07c693273",
           "remote": true
         }
       ],
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "4002",
+          "namespace_id": "4001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -206,7 +208,8 @@
       "vars": {
         "EDGE_ENV": "test",
         "NODE_ENV": "test",
-        "BRAND_NAME": "UMAXICA"
+        "BRAND_NAME": "UMAXICA",
+        "RAILS_STAFF_BASE_ORIGIN": "https://www.umaxica.org"
       },
       "version_metadata": {
         "binding": "REVISION"
@@ -214,7 +217,7 @@
       "ratelimits": [
         {
           "name": "RATE_LIMITER",
-          "namespace_id": "3002",
+          "namespace_id": "3001",
           "simple": {
             "limit": 2000,
             "period": 60
@@ -226,7 +229,7 @@
   "ratelimits": [
     {
       "name": "RATE_LIMITER",
-      "namespace_id": "1002",
+      "namespace_id": "1001",
       "simple": {
         "limit": 2000,
         "period": 60

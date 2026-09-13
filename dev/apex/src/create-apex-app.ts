@@ -5,10 +5,10 @@ import { languageDetector } from 'hono/language';
 import { timeout } from 'hono/timeout';
 
 import { apexCsrf } from './csrf';
-import { renderHealthJson, renderHealthPage } from './health-page';
 import { locales } from './i18n/config';
 import { checkRateLimit } from './rate-limit';
 import { renderer } from './renderer';
+import { renderAggregateHealth, renderHealthApi, renderProbe } from './runtime-health';
 import { apexSecurityHeaders, type AssetEnv } from './security-headers';
 import type { Meta } from './seo';
 import { errorPage, notFoundPage, offlinePageMarkup } from './status-page';
@@ -52,7 +52,7 @@ const bindings = (c: Context<ApexEnv>): AssetEnv | undefined => c.env;
 const NEGOTIATED_ON = 'Cookie, Accept-Language';
 
 /*
- * HTML only. `/health.json` and `/revision` are negotiated by nothing, and
+ * HTML only. `/revision` is negotiated by nothing, and
  * `/assets/*` is answered by the assets binding before this Worker runs.
  *
  * `no-store` responses — the status, 404 and error documents — are left alone:
@@ -78,16 +78,56 @@ const varyOnNegotiation: MiddlewareHandler = async (c, next) => {
   headers.append('Vary', NEGOTIATED_ON);
 };
 
+/*
+ * The probes the rate limiter must never see, and the reason the set is this
+ * small.
+ *
+ * Each of these three is a constant — no binding read, no downstream hop,
+ * nothing that can fail. A 429 on one of them is indistinguishable from a dead
+ * isolate, so an endpoint an orchestrator trusts to mean "alive" must not be
+ * throttleable.
+ *
+ * `/health` and `/health/readinesses` are deliberately absent. They answer from
+ * this isolate on an apex Worker, but they reach Rails over the Workers VPC
+ * binding on a Core and on an Astro surface, and this exemption is written once
+ * for all twenty units rather than per family: a set that means "cheap here,
+ * an uncounted path into Rails there" is not a rule anyone can check. Readiness
+ * is the probe whose job is to answer "do not send me traffic"; being throttled
+ * is a correct answer for it, and is not one for liveness or startup.
+ *
+ * `/revision` and `/api/v0/revision.json` are absent too: deployment metadata,
+ * not probes. Nothing operational breaks when one of them is throttled, so
+ * there is no reason to hand out an uncounted Worker invocation.
+ */
+function isUnmeteredProbe(path: string): boolean {
+  return (
+    path === '/health/startups' || path === '/health/livenesses' || path === '/api/v0/health.json'
+  );
+}
+
+/*
+ * Every machine-facing endpoint, which is a WIDER set than the one above and
+ * answers a different question: which responses must not be language-negotiated.
+ *
+ * `languageDetector` writes a `language` cookie as a side effect of running.
+ * A monitor polling `/revision` is not a browser expressing a preference, and a
+ * machine document that varies by locale is a document no probe can diff. Both
+ * concerns used to share one path list, which is what let the limiter quietly
+ * inherit the revision endpoints.
+ */
+function isMachineEndpoint(path: string): boolean {
+  return (
+    path === '/health' ||
+    path.startsWith('/health/') ||
+    path === '/api/v0/health.json' ||
+    path === '/revision' ||
+    path === '/api/v0/revision.json'
+  );
+}
+
 type ConfigurePageRoutes = (pageRoutes: Hono<ApexEnv>) => void;
 
-type CreateApexAppOptions = {
-  service: string;
-};
-
-export function createApexApp(
-  configurePageRoutes: ConfigurePageRoutes,
-  options: CreateApexAppOptions,
-) {
+export function createApexApp(configurePageRoutes: ConfigurePageRoutes) {
   const app = new Hono<ApexEnv>();
   const pageRoutes = new Hono<ApexEnv>();
 
@@ -96,14 +136,23 @@ export function createApexApp(
   app.use(etag());
   app.use(apexStructuredLogger);
   app.use(async (c, next) => {
+    if (isUnmeteredProbe(c.req.path)) return next();
     const blocked = await checkRateLimit(c.req.raw, bindings(c)?.RATE_LIMITER);
     if (blocked) return blocked;
     return next();
   });
   app.use('*', apexCsrf);
   // Reads the locale set from this unit's own config rather than repeating
-  // it, so the detector and `<html lang>` cannot disagree.
-  app.use(languageDetector({ supportedLanguages: [...locales], fallbackLanguage: 'en' }));
+  // it, so the detector and `<html lang>` cannot disagree. Machine health
+  // must not emit a language cookie as a side effect.
+  const detectLanguage = languageDetector({
+    supportedLanguages: [...locales],
+    fallbackLanguage: 'en',
+  });
+  app.use(async (c, next) => {
+    if (isMachineEndpoint(c.req.path)) return next();
+    return detectLanguage(c, next);
+  });
 
   pageRoutes.use(renderer);
   configurePageRoutes(pageRoutes);
@@ -133,22 +182,30 @@ export function createApexApp(
        */
       error: err.name,
       method: c.req.method,
-      path: new URL(c.req.url).pathname,
+      path: c.req.path,
     });
 
     return errorPage(500, c.get('language'), requestThemeAttribute(c.req.raw));
   });
 
-  app.get('/health', timeout(2000), (c) =>
-    renderHealthPage(c.env, options, requestThemeAttribute(c.req.raw)),
-  );
-  app.get('/health.html', timeout(2000), (c) =>
-    renderHealthPage(c.env, options, requestThemeAttribute(c.req.raw)),
-  );
-  app.get('/health.json', timeout(2000), (c) => renderHealthJson(c.env, options));
-  app.get('/revision', (c) => {
+  app.get('/health/startups', timeout(2000), () => renderProbe('startup'));
+  app.get('/health/livenesses', timeout(2000), () => renderProbe('liveness'));
+  app.get('/health/readinesses', timeout(2000), () => renderProbe('readiness'));
+  app.get('/health', timeout(2000), () => renderAggregateHealth());
+  app.get('/api/v0/health.json', timeout(2000), () => renderHealthApi());
+  const versionMetadata = (c: Context<ApexEnv>) => {
     const { id = null, tag = null, timestamp = null } = bindings(c)?.CF_VERSION_METADATA ?? {};
-    return c.json({ id, tag, timestamp }, 200, {
+    return { id, tag, timestamp };
+  };
+  app.get('/revision', (c) => {
+    const { id } = versionMetadata(c);
+    return c.text(`${id ?? 'unknown'}\n`, 200, {
+      'Cache-Control': 'no-store',
+      'X-Robots-Tag': 'noindex, nofollow',
+    });
+  });
+  app.get('/api/v0/revision.json', (c) => {
+    return c.json(versionMetadata(c), 200, {
       'Cache-Control': 'no-store',
       'X-Robots-Tag': 'noindex, nofollow',
     });

@@ -1,10 +1,18 @@
 {
   "name": "umaxica-apps-edge",
-  // `compose.yaml` alone is the complete standard development environment: it
-  // must be enough for a fresh `git clone` on every supported host, including
-  // RHEL/Fedora with SELinux Enforcing (`core` carries `label=disable` there)
-  // and rootless Podman. Nothing here may reference a file that a clone does
-  // not contain -- the Dev Containers CLI passes every `dockerComposeFile`
+  // Two TRACKED files, both required on a fresh `git clone`: `../compose.yaml`
+  // carries the shared services, and `./compose.yaml` defines `core`, the
+  // workspace container. `core` lives there rather than in `../compose.yaml`
+  // precisely so that a bare `podman compose up` does not start it.
+  //
+  // Order matters twice: Compose merges later files over earlier ones, and it
+  // takes the project directory from the FIRST entry, which is what keeps every
+  // relative path in both files anchored at the repository root.
+  //
+  // Between them they must be enough for a fresh `git clone` on every supported
+  // host, including RHEL/Fedora with SELinux Enforcing (`core` carries
+  // `label=disable` there) and rootless Podman. Nothing here may reference a
+  // file that a clone does not contain -- the Dev Containers CLI passes every `dockerComposeFile`
   // entry to Compose as `-f`, so a missing entry fails at configuration
   // resolution with a bare `no such file or directory` (this is exactly how
   // Codespaces used to fail on the retired developer-local overlay).
@@ -16,9 +24,10 @@
   // need it -- VS Code Dev Containers forwards the host agent for Git on its
   // own. Start with `scripts/dev-start` if you want your own override applied.
   //
-  // One file also means one project name, one set of containers and one set of
-  // volumes shared with `scripts/dev-start` and a bare `podman compose`.
-  "dockerComposeFile": ["../compose.yaml"],
+  // Both files declare the same project name, so the Dev Container,
+  // `scripts/dev-start` and a bare `podman compose` share one set of containers
+  // and one set of volumes.
+  "dockerComposeFile": ["../compose.yaml", "./compose.yaml"],
   "service": "core",
   "remoteUser": "edge",
   "containerUser": "edge",
@@ -183,9 +192,7 @@
   },
 
   "features": {
-    "ghcr.io/marcosbolanos/devcontainer-features/neovim-prebuilt:1": {},
     "ghcr.io/jsburckhardt/devcontainer-features/herdr:1": { "VERSION": "v0.8.0" },
-    "ghcr.io/joedmck/devcontainer-features/wrangler:1": {},
     "ghcr.io/srzstephen/devcontainer-features/claude-code:1": {},
     "ghcr.io/nolanjx/devcontainer-features/codex:1": {}
   },

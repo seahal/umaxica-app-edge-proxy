@@ -1,43 +1,44 @@
-# This unit is TanStack Start on Vite
+# This unit is a TanStack Start public content cell
 
-`app/help` builds with Vite and `@cloudflare/vite-plugin` and runs on workerd, like
-every one of the twenty deployment units in this repository. Every frame runs the
-same stack, so a pattern copied from a sibling frame is current.
+This unit is one of the twelve public Publishing cells
+`{app,com,org}/{docs,help,info,news}`. It runs TanStack Start on Cloudflare
+Workers, built with Vite. `adr/019-public-content-surfaces-tanstack-start.md`
+is the decision record; it supersedes `adr/015` (Astro) for these twelve units.
 
-What a sibling can differ in is **archetype**. This unit is a satellite: its
-shell is wired into `src/routes/__root.tsx`, so the 404, the 500 and `/offline`
-render inside it and carry the header, the footer and the skip link. The three
-Cores put their shell on a pathless `_page.tsx` layout route instead, so their
-failure documents render bare. Check which one you are reading before copying a
-route or a shell change; `docs/design/ui-shell-contract.md` §15 is normative.
+## One implementation, twelve cells
 
-TanStack Start is at Release Candidate, and its API moves quickly. Read the
-current documentation rather than working from memory:
-
-- <https://tanstack.com/start/latest/docs/framework/react/overview>
-- <https://tanstack.com/router/latest/docs/framework/react/guide/document-head-management>
-- <https://developers.cloudflare.com/workers/framework-guides/web-apps/tanstack-start/>
+- **`src/lib/publishing-cell.ts` is the only source file that differs** between
+  the twelve units: surface, audience, brand title, canonical origins, private
+  Rails host. Everything else under `src/`, `test/` and `e2e/` is byte-identical
+  across them — `test/publishing-cells.test.ts` at the repository root enforces
+  it. Change a shared file in all twelve units at once.
+- The cell is a static literal. Never infer it from a hostname, a directory name
+  or a request.
 
 ## What is load-bearing here
 
-- **`src/routes/__root.tsx` declares no `title`.** `<HeadContent />` renders the
-  head tags of every matched route and React hoists a `<title>` a component
-  renders on top of that, so a root title plus a failure document's own title
-  serves TWO `<title>` elements — and `api/title-contract.hurl` asserts there is
-  exactly one. Every route owns its title; `src/lib/title.ts` composes the suffix.
-- **`src/server.ts` uses `defaultRenderHandler`, not `defaultStreamHandler`.**
-  Streaming flushes the shell before a failure is known, so a thrown error
-  produced a 200 with no `<title>` and no error document. Rendering to a string
-  first is what makes the 500 real.
-- **`vite.config.ts` forwards `EDGE_LOCAL_*` only while serving.** `vite dev`
-  runs the Worker in workerd, whose `process.env` comes from the Worker's own
-  vars rather than the shell, so the flags have to be bridged — but forwarding
-  them during a build bakes them into the production artefact.
+- **Routes** (`src/routes/`): `/{lang}/`, `/{lang}/about/`, `/{lang}/entries/`,
+  `/{lang}/entries/page/{N}/` (N >= 2; `/page/1/` 301s to `/entries/`),
+  `/{lang}/entries/{public_id}/`, `/{lang}/search/`. `lang` is `ja` or `en`,
+  mandatory, validated by `src/routes/$lang.tsx`; anything else is 404. `/`
+  negotiates `Accept-Language` and 302s.
+- **Rails is reached from the server only.** Loaders call `createServerOnlyFn`
+  functions (`src/lib/publishing-loaders.ts`), so Rails, the VPC binding and the
+  private origin never enter a client bundle and there is no browser JSON API.
+  Every link is a plain `<a>`; never switch a Publishing link to `<Link>`.
+- **Status mapping.** A failed Rails read renders `PublishingUnavailable` and
+  names 502/503/504 in an internal header that `src/request-handler.ts` moves
+  onto the status line (`src/lib/publishing-status.ts`).
+- **Cache scope is one route.** Only `/{lang}/entries/{public_id}/` sends a
+  public `Cache-Control`, from `src/lib/cache-policy.ts`. Do not add cache
+  policy to other routes.
+- **Search is temporary.** `src/lib/search/current-source.ts` selects a fixture
+  source; the route depends on `SearchSource` only.
+- **Management links are always rendered** and point at `RAILS_STAFF_BASE_ORIGIN`
+  by `public_id`. This unit never checks login state.
 - **`remoteBindings` is false unless `CLOUDFLARE_ENV=vpc`.** A Workers VPC
-  Service has no local simulator, so the default (`true`) makes every command
-  demand an interactive `wrangler login`.
-- **No `assets.directory` in `wrangler.jsonc`.** `vite build` writes it into the
-  output config; see `adr/012-apex-vite-build-and-static-assets.md`.
-
-`adr/013-frames-tanstack-start.md` is the decision record, including what got
-worse and the four constraints this stack is used under.
+  Service has no local simulator.
+- **Region is `PUBLIC_REGION` at build time**, replaced with a literal by
+  `vite.config.ts`. Language is a URL prefix.
+- **`src/routeTree.gen.ts` is committed** and regenerated by `vite dev` /
+  `vite build`.

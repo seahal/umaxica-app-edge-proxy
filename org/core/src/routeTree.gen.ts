@@ -23,8 +23,14 @@ import { Route as PageExploreRouteImport } from './routes/_page.explore'
 import { Route as PageHomeRouteImport } from './routes/_page.home'
 import { Route as PageMessagesRouteImport } from './routes/_page.messages'
 import { Route as PageNotificationsRouteImport } from './routes/_page.notifications'
+import { Route as PagePublishingRouteImport } from './routes/_page.publishing'
+import { Route as HealthLivenessesRouteImport } from './routes/health.livenesses'
+import { Route as HealthReadinessesRouteImport } from './routes/health.readinesses'
+import { Route as HealthStartupsRouteImport } from './routes/health.startups'
 import { Route as PageConfigurationIndexRouteImport } from './routes/_page.configuration.index'
 import { Route as PageConfigurationAccountRouteImport } from './routes/_page.configuration.account'
+import { Route as ApiV0HealthDotjsonRouteImport } from './routes/api.v0.health[.]json'
+import { Route as ApiV0RevisionDotjsonRouteImport } from './routes/api.v0.revision[.]json'
 
 const PageRoute = PageRouteImport.update({
   id: '/_page',
@@ -95,6 +101,26 @@ const PageNotificationsRoute = PageNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => PageRoute,
 } as any)
+const PagePublishingRoute = PagePublishingRouteImport.update({
+  id: '/publishing',
+  path: '/publishing',
+  getParentRoute: () => PageRoute,
+} as any)
+const HealthLivenessesRoute = HealthLivenessesRouteImport.update({
+  id: '/livenesses',
+  path: '/livenesses',
+  getParentRoute: () => HealthRoute,
+} as any)
+const HealthReadinessesRoute = HealthReadinessesRouteImport.update({
+  id: '/readinesses',
+  path: '/readinesses',
+  getParentRoute: () => HealthRoute,
+} as any)
+const HealthStartupsRoute = HealthStartupsRouteImport.update({
+  id: '/startups',
+  path: '/startups',
+  getParentRoute: () => HealthRoute,
+} as any)
 const PageConfigurationIndexRoute = PageConfigurationIndexRouteImport.update({
   id: '/configuration/',
   path: '/configuration/',
@@ -106,10 +132,20 @@ const PageConfigurationAccountRoute =
     path: '/configuration/account',
     getParentRoute: () => PageRoute,
   } as any)
+const ApiV0HealthDotjsonRoute = ApiV0HealthDotjsonRouteImport.update({
+  id: '/api/v0/health.json',
+  path: '/api/v0/health.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV0RevisionDotjsonRoute = ApiV0RevisionDotjsonRouteImport.update({
+  id: '/api/v0/revision.json',
+  path: '/api/v0/revision.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PageIndexRoute
-  '/health': typeof HealthRoute
+  '/health': typeof HealthRouteWithChildren
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/offline': typeof OfflineRoute
   '/revision': typeof RevisionRoute
@@ -121,11 +157,17 @@ export interface FileRoutesByFullPath {
   '/home': typeof PageHomeRoute
   '/messages': typeof PageMessagesRoute
   '/notifications': typeof PageNotificationsRoute
+  '/publishing': typeof PagePublishingRoute
+  '/health/livenesses': typeof HealthLivenessesRoute
+  '/health/readinesses': typeof HealthReadinessesRoute
+  '/health/startups': typeof HealthStartupsRoute
   '/configuration/account': typeof PageConfigurationAccountRoute
+  '/api/v0/health.json': typeof ApiV0HealthDotjsonRoute
+  '/api/v0/revision.json': typeof ApiV0RevisionDotjsonRoute
   '/configuration/': typeof PageConfigurationIndexRoute
 }
 export interface FileRoutesByTo {
-  '/health': typeof HealthRoute
+  '/health': typeof HealthRouteWithChildren
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/offline': typeof OfflineRoute
   '/revision': typeof RevisionRoute
@@ -137,14 +179,20 @@ export interface FileRoutesByTo {
   '/home': typeof PageHomeRoute
   '/messages': typeof PageMessagesRoute
   '/notifications': typeof PageNotificationsRoute
+  '/publishing': typeof PagePublishingRoute
+  '/health/livenesses': typeof HealthLivenessesRoute
+  '/health/readinesses': typeof HealthReadinessesRoute
+  '/health/startups': typeof HealthStartupsRoute
   '/': typeof PageIndexRoute
   '/configuration/account': typeof PageConfigurationAccountRoute
+  '/api/v0/health.json': typeof ApiV0HealthDotjsonRoute
+  '/api/v0/revision.json': typeof ApiV0RevisionDotjsonRoute
   '/configuration': typeof PageConfigurationIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_page': typeof PageRouteWithChildren
-  '/health': typeof HealthRoute
+  '/health': typeof HealthRouteWithChildren
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/offline': typeof OfflineRoute
   '/revision': typeof RevisionRoute
@@ -156,8 +204,14 @@ export interface FileRoutesById {
   '/_page/home': typeof PageHomeRoute
   '/_page/messages': typeof PageMessagesRoute
   '/_page/notifications': typeof PageNotificationsRoute
+  '/_page/publishing': typeof PagePublishingRoute
+  '/health/livenesses': typeof HealthLivenessesRoute
+  '/health/readinesses': typeof HealthReadinessesRoute
+  '/health/startups': typeof HealthStartupsRoute
   '/_page/': typeof PageIndexRoute
   '/_page/configuration/account': typeof PageConfigurationAccountRoute
+  '/api/v0/health.json': typeof ApiV0HealthDotjsonRoute
+  '/api/v0/revision.json': typeof ApiV0RevisionDotjsonRoute
   '/_page/configuration/': typeof PageConfigurationIndexRoute
 }
 export interface FileRouteTypes {
@@ -176,7 +230,13 @@ export interface FileRouteTypes {
     | '/home'
     | '/messages'
     | '/notifications'
+    | '/publishing'
+    | '/health/livenesses'
+    | '/health/readinesses'
+    | '/health/startups'
     | '/configuration/account'
+    | '/api/v0/health.json'
+    | '/api/v0/revision.json'
     | '/configuration/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -192,8 +252,14 @@ export interface FileRouteTypes {
     | '/home'
     | '/messages'
     | '/notifications'
+    | '/publishing'
+    | '/health/livenesses'
+    | '/health/readinesses'
+    | '/health/startups'
     | '/'
     | '/configuration/account'
+    | '/api/v0/health.json'
+    | '/api/v0/revision.json'
     | '/configuration'
   id:
     | '__root__'
@@ -210,19 +276,27 @@ export interface FileRouteTypes {
     | '/_page/home'
     | '/_page/messages'
     | '/_page/notifications'
+    | '/_page/publishing'
+    | '/health/livenesses'
+    | '/health/readinesses'
+    | '/health/startups'
     | '/_page/'
     | '/_page/configuration/account'
+    | '/api/v0/health.json'
+    | '/api/v0/revision.json'
     | '/_page/configuration/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   PageRoute: typeof PageRouteWithChildren
-  HealthRoute: typeof HealthRoute
+  HealthRoute: typeof HealthRouteWithChildren
   ManifestDotwebmanifestRoute: typeof ManifestDotwebmanifestRoute
   OfflineRoute: typeof OfflineRoute
   RevisionRoute: typeof RevisionRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiV0HealthDotjsonRoute: typeof ApiV0HealthDotjsonRoute
+  ApiV0RevisionDotjsonRoute: typeof ApiV0RevisionDotjsonRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -325,6 +399,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PageNotificationsRouteImport
       parentRoute: typeof PageRoute
     }
+    '/_page/publishing': {
+      id: '/_page/publishing'
+      path: '/publishing'
+      fullPath: '/publishing'
+      preLoaderRoute: typeof PagePublishingRouteImport
+      parentRoute: typeof PageRoute
+    }
+    '/health/livenesses': {
+      id: '/health/livenesses'
+      path: '/livenesses'
+      fullPath: '/health/livenesses'
+      preLoaderRoute: typeof HealthLivenessesRouteImport
+      parentRoute: typeof HealthRoute
+    }
+    '/health/readinesses': {
+      id: '/health/readinesses'
+      path: '/readinesses'
+      fullPath: '/health/readinesses'
+      preLoaderRoute: typeof HealthReadinessesRouteImport
+      parentRoute: typeof HealthRoute
+    }
+    '/health/startups': {
+      id: '/health/startups'
+      path: '/startups'
+      fullPath: '/health/startups'
+      preLoaderRoute: typeof HealthStartupsRouteImport
+      parentRoute: typeof HealthRoute
+    }
     '/_page/configuration/': {
       id: '/_page/configuration/'
       path: '/configuration'
@@ -339,6 +441,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PageConfigurationAccountRouteImport
       parentRoute: typeof PageRoute
     }
+    '/api/v0/health.json': {
+      id: '/api/v0/health.json'
+      path: '/api/v0/health.json'
+      fullPath: '/api/v0/health.json'
+      preLoaderRoute: typeof ApiV0HealthDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v0/revision.json': {
+      id: '/api/v0/revision.json'
+      path: '/api/v0/revision.json'
+      fullPath: '/api/v0/revision.json'
+      preLoaderRoute: typeof ApiV0RevisionDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -349,6 +465,7 @@ interface PageRouteChildren {
   PageHomeRoute: typeof PageHomeRoute
   PageMessagesRoute: typeof PageMessagesRoute
   PageNotificationsRoute: typeof PageNotificationsRoute
+  PagePublishingRoute: typeof PagePublishingRoute
   PageIndexRoute: typeof PageIndexRoute
   PageConfigurationAccountRoute: typeof PageConfigurationAccountRoute
   PageConfigurationIndexRoute: typeof PageConfigurationIndexRoute
@@ -361,6 +478,7 @@ const PageRouteChildren: PageRouteChildren = {
   PageHomeRoute: PageHomeRoute,
   PageMessagesRoute: PageMessagesRoute,
   PageNotificationsRoute: PageNotificationsRoute,
+  PagePublishingRoute: PagePublishingRoute,
   PageIndexRoute: PageIndexRoute,
   PageConfigurationAccountRoute: PageConfigurationAccountRoute,
   PageConfigurationIndexRoute: PageConfigurationIndexRoute,
@@ -368,14 +486,31 @@ const PageRouteChildren: PageRouteChildren = {
 
 const PageRouteWithChildren = PageRoute._addFileChildren(PageRouteChildren)
 
+interface HealthRouteChildren {
+  HealthLivenessesRoute: typeof HealthLivenessesRoute
+  HealthReadinessesRoute: typeof HealthReadinessesRoute
+  HealthStartupsRoute: typeof HealthStartupsRoute
+}
+
+const HealthRouteChildren: HealthRouteChildren = {
+  HealthLivenessesRoute: HealthLivenessesRoute,
+  HealthReadinessesRoute: HealthReadinessesRoute,
+  HealthStartupsRoute: HealthStartupsRoute,
+}
+
+const HealthRouteWithChildren =
+  HealthRoute._addFileChildren(HealthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   PageRoute: PageRouteWithChildren,
-  HealthRoute: HealthRoute,
+  HealthRoute: HealthRouteWithChildren,
   ManifestDotwebmanifestRoute: ManifestDotwebmanifestRoute,
   OfflineRoute: OfflineRoute,
   RevisionRoute: RevisionRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiV0HealthDotjsonRoute: ApiV0HealthDotjsonRoute,
+  ApiV0RevisionDotjsonRoute: ApiV0RevisionDotjsonRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

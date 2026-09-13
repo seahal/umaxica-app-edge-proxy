@@ -417,3 +417,17 @@ applies to `scripts/dev-start` and a bare `docker compose` and not to the editor
 The tunnel decisions this ADR records are unaffected: the connector, its pinned
 release and its hardening already live in `compose.yaml`, and only its token
 comes from the gitignored `.env`.
+
+---
+
+## Amendment (2026-09-02): content frames do not carry `/health.json`
+
+The 2026-08-11 amendment put `/health.json` on `{app,com,org}/info` so a tunnel
+hostname mix-up was visible in the response. That made `info` the only content
+surface with a second health document. The twelve Astro frames now share one
+liveness contract: `/health` (Edge + Rails). `/health.json` stays on the apex
+workers, where `service` is part of `createApexApp`.
+
+Brand mix-up on a content frame is again unproven from the HTML (WARN in
+`tools/verify-edge-connectivity.mjs`). `test/tunnel-surface-identity.test.ts`
+asserts that none of the twelve frames reintroduce `health.json.ts`.

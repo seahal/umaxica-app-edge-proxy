@@ -1,158 +1,235 @@
-# The COMPLETE standard development environment. A fresh `git clone` plus a
-# container engine must be enough to start it and to open the Dev Container --
-# on Ubuntu, and on RHEL/Fedora with SELinux Enforcing, under Docker and under
-# rootless Podman. Nothing here may require a file a clone does not contain, and
-# nothing here may use a required `${VAR:?}` interpolation: Compose interpolates
-# the whole file whichever service is named, so one would stop every machine
-# that has not set the variable.
+# The shared development environment: the Cloudflare Tunnel connector, the
+# networks, the named volumes, and -- behind the `app` profile -- one dev-server
+# service per workspace unit. A fresh `git clone` plus a container engine must be
+# enough to start it and to open the Dev Container -- on Ubuntu, and on
+# RHEL/Fedora with SELinux Enforcing, under Docker and under rootless Podman.
+# Nothing here may require a file a clone does not contain, and nothing here may
+# use a required `${VAR:?}` interpolation: Compose interpolates the whole file
+# whichever service is named, so one would stop every machine that has not set
+# the variable.
+#
+# There are two supported ways to run this repository, and they share every
+# volume and every network in this file:
+#
+#   podman compose up                  the shared services only. Run the dev
+#                                      servers from wherever you like.
+#   podman compose --profile app up    the above plus the twenty dev servers,
+#                                      one container each. No editor.
+#   Open in Dev Container              the above minus the twenty, plus `core`
+#                                      from `.devcontainer/compose.yaml` -- a
+#                                      workspace container to attach to, from
+#                                      which you start dev servers by hand.
+#
+# `core` and the per-unit services publish the same host ports, so at most one of
+# the two shapes runs at a time.
 #
 # Developer-local, host-specific additions go in the OPTIONAL, gitignored
 # `compose.override.yaml`, documented by `compose.override.yaml.example`. Nobody
 # has to create it; Compose auto-discovers it when no `-f` is given, and
-# `scripts/dev-start` loads it when it exists. `.devcontainer/devcontainer.json`
-# lists this file alone, so the editor never depends on a local override.
+# `scripts/dev-start` loads it when it exists.
 #
 # The one compose project for this repository: `.devcontainer/devcontainer.json`,
-# `scripts/dev-start` and a bare `podman compose` all resolve to this same name,
-# so they share one set of containers and volumes. An override must repeat it.
+# `.devcontainer/compose.yaml`, `scripts/dev-start` and a bare `podman compose`
+# all resolve to this same name, so they share one set of containers and volumes.
+# An override must repeat it.
 name: umaxica-apps-edge
 
+# The twenty dev servers, one Compose service per workspace unit, WITHOUT the
+# Dev Container.
+#
+# `core` (.devcontainer/compose.yaml) and these are the same image and the same
+# workspace bind; they differ only in what PID 1 does. `core` sleeps and waits
+# for an editor to attach, and you start `pnpm --dir com/apex run dev` inside it
+# by hand. Each service below instead IS one of those dev servers, so
+#
+#     podman compose --profile app up com-apex
+#
+# is a complete, editor-free way to work on one unit -- and `--profile app up`
+# with no service named starts all twenty.
+#
+# One service per unit rather than one service running all twenty: the units
+# deploy independently, and a `vite dev` that has crashed should be visible and
+# restartable as itself rather than buried in a combined log. The port each one
+# publishes is the port its own `dev` script already binds; `--host` in those
+# scripts is what makes the server reachable from outside its container.
+#
+# They are behind the `app` profile so a bare `podman compose up` starts the
+# shared services only -- the shape the Dev Container needs, and the shape you
+# want before running a build or a test suite by hand. Each service publishes
+# the same host port `core` does, so `core` and any of these are mutually
+# exclusive: stop the Dev Container first.
+x-unit: &unit
+  profiles:
+    - app
+  build:
+    context: .
+    dockerfile: Containerfile
+    args:
+      CONTAINER_UID: 1000
+      CONTAINER_GID: 1000
+      CONTAINER_USER: edge
+      CONTAINER_GROUP: edge
+  # Dependencies are installed first because, unlike the Dev Container, nothing
+  # here runs `postCreateCommand`. `node-volume` is shared with `core`, so
+  # whichever entry point runs first populates it for the others; the twenty
+  # services then find it already installed and `--frozen-lockfile` is a no-op.
+  command:
+    - 'sh'
+    - '-lc'
+    - 'pnpm install --frozen-lockfile && exec pnpm run dev'
+  init: true
+  userns_mode: keep-id:uid=1000,gid=1000
+  security_opt:
+    - no-new-privileges:true
+    - label=disable
+  cap_drop:
+    - ALL
+  environment:
+    # `CLOUDFLARE_ENV` is set per unit by its own `dev` script; this is the
+    # fallback for anything that reads it before that script runs.
+    CLOUDFLARE_ENV: development
+    GH_TOKEN: ${GH_TOKEN:-}
+  # `no`, not `on-failure:N`: the failures a dev server actually hits -- a type
+  # error, a bad import, a missing dependency -- are ones a restart repeats.
+  # It stays stopped and visible instead.
+  restart: 'no'
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+  # `edge-tunnel` is the cross-repository network Global's `cloudflare-tunnel-edge`
+  # connector joins to reach a dev server here. `core` claims the alias
+  # `edge.localhost` on it, which is what a Global ingress rule addresses while the
+  # Dev Container is what is running. These twenty carry no alias -- twenty
+  # containers cannot share one name -- so against `--profile app` a Global ingress
+  # rule names the unit's own service instead, e.g. `http://com-apex:5101`.
+  networks:
+    default: {}
+    edge-tunnel: {}
+  volumes:
+    - type: bind
+      source: .
+      target: /home/edge/workspace
+      consistency: cached
+    - type: volume
+      source: node-volume
+      target: /home/edge/workspace/node_modules
+      volume:
+        nocopy: true
+    - type: volume
+      source: home-cache
+      target: /home/edge/.cache
+    - type: volume
+      source: pnpm-store
+      target: /home/edge/.local/share/pnpm/store
+    - type: volume
+      source: workspace-secrets-mask
+      target: /home/edge/workspace/.secrets
+      read_only: true
+      volume:
+        nocopy: true
 services:
-  core:
-    build:
-      context: .
-      dockerfile: Containerfile
-      args:
-        CONTAINER_UID: 1000
-        CONTAINER_GID: 1000
-        CONTAINER_USER: edge
-        CONTAINER_GROUP: edge
-    working_dir: /home/edge/workspace
-    volumes:
-      - type: bind
-        source: .
-        target: /home/edge/workspace
-        consistency: cached
-      - type: volume
-        source: node-volume
-        target: /home/edge/workspace/node_modules
-        volume:
-          nocopy: true
-      - type: volume
-        source: home-cache
-        target: /home/edge/.cache
-      - type: volume
-        source: pnpm-store
-        target: /home/edge/.local/share/pnpm/store
-      # The tailnet node's identity, for the interactive `tailscale up` the image
-      # ships a wrapper for. Surviving a container recreate is the whole point:
-      # without it every start registers a NEW node and the tailnet name drifts
-      # to umaxica-edge-core-1, -2, ... `down --volumes` destroys it and the next
-      # `tailscale up` enrols afresh.
-      - type: volume
-        source: tailscale-state
-        target: /home/edge/.local/state/tailscale
-      - type: volume
-        source: workspace-secrets-mask
-        target: /home/edge/workspace/.secrets
-        read_only: true
-        volume:
-          nocopy: true
+  com-apex:
+    <<: *unit
+    working_dir: '/home/edge/workspace/com/apex'
     ports:
-      - '127.0.0.1:5101:5101' # com/apex
-      - '127.0.0.1:5103:5103' # com/info
-      - '127.0.0.1:5105:5105' # com/core
-      - '127.0.0.1:5106:5106' # com/docs
-      - '127.0.0.1:5107:5107' # com/news
-      - '127.0.0.1:5108:5108' # com/help
-      - '127.0.0.1:5201:5201' # net/apex
-      - '127.0.0.1:5301:5301' # org/apex
-      - '127.0.0.1:5303:5303' # org/info
-      - '127.0.0.1:5305:5305' # org/core
-      - '127.0.0.1:5306:5306' # org/docs
-      - '127.0.0.1:5307:5307' # org/news
-      - '127.0.0.1:5308:5308' # org/help
-      - '127.0.0.1:5401:5401' # app/apex
-      - '127.0.0.1:5403:5403' # app/info
-      - '127.0.0.1:5405:5405' # app/core
-      - '127.0.0.1:5406:5406' # app/docs
-      - '127.0.0.1:5407:5407' # app/news
-      - '127.0.0.1:5408:5408' # app/help
-      - '127.0.0.1:5501:5501' # dev/apex
-      # Browser OAuth callback for `wrangler login`. Cloudflare credentials are
-      # now obtained interactively inside the container instead of being
-      # injected as a long-lived API token, so this port is part of the base
-      # environment rather than an opt-in credential overlay.
-      - '127.0.0.1:8976:8976' # wrangler login callback
-    command: sleep infinity
-    tty: true
-    stdin_open: true
-    init: true
-    # `keep-id:uid=1000,gid=1000` rather than a bare `keep-id`: the host user is
-    # mapped to 1000 INSIDE the container whatever its host id is, which is the
-    # id the image bakes into /home/edge. A bare `keep-id` passes the host id
-    # through unchanged, so a host whose uid is not 1000 gets a home and a
-    # workspace owned by the wrong user -- which is why this used to need a
-    # host-side hook writing the real ids into `.env` before every build.
-    # Pinning both ends removes that bootstrap entirely.
-    userns_mode: keep-id:uid=1000,gid=1000
-    security_opt:
-      - no-new-privileges:true
-      # SELinux Enforcing (Fedora/RHEL) 対応。標準環境の成立条件なので、
-      # ローカル override ではなくこちらに置く。
-      #
-      # このファイルの bind mount はワークスペースを渡す `.` の 1 本だけで、
-      # :z / :Z を付けていない。ホスト側リポジトリは user_home_t の
-      # ままなので container_t のコンテナからは読めない。uid/gid は keep-id で
-      # 一致していて DAC は通っており、落ちているのは MAC の側だけ
-      # (`ls /home/edge/workspace` がディレクトリ一覧すら出せない)。
-      #
-      # :z を付ける手もあるが、それはホスト側リポジトリを
-      # container_file_t へ「再ラベル」してしまう。label=disable はこの
-      # コンテナ 1 つに閉じ、ホストのラベルを一切書き換えないのでこちらを取る。
-      # SELinux を使っていないホスト (Ubuntu 等) では Docker / Podman とも
-      # 単に無視されるため、無条件に置いて安全。
-      - label=disable
-    cap_drop:
-      - ALL
-    environment:
-      CLOUDFLARE_ENV: development
-      # gh CLI の API 認証。トークン本体はこのファイルに書かず、ホスト側の
-      # 環境変数からそのまま引き渡す。gh のトークン解決順は
-      # GH_TOKEN > GITHUB_TOKEN > 設定ファイル なので、イメージ側に失効した
-      # トークンが残っていてもこちらが必ず勝つ。gh auth login は不要。
-      #
-      # `:?` ではなく `:-` なのが要点。Compose は起動するサービスに関係なく
-      # ファイル全体を補間するため、`:?` にするとトークンを持たないマシンでは
-      # `compose config` ごと止まる。gh は空文字を「未設定」として扱い
-      # hosts.yml へフォールバックするので、空のまま渡して無害。
-      GH_TOKEN: ${GH_TOKEN:-}
-      # Read only by `tools/verify-edge-connectivity.mjs` as an "am I inside the
-      # container" hint, alongside its `/.dockerenv` fallback. It is a property of
-      # this service rather than of the editor attached to it, so it belongs here
-      # rather than in an overlay only VS Code loads.
-      DEVCONTAINER: '1'
-    # `default` is written out rather than left implicit: a service-level
-    # `networks:` list REPLACES the implicit membership instead of merging with
-    # it, so omitting it would detach `core` from this project's own network.
-    #
-    # `edge.localhost` is the address the Global/Rails Cloudflare Tunnel
-    # connector names in its ingress rules, and it has to be unambiguous. Podman
-    # registers the service name as an alias on every network a container joins,
-    # so a rule naming `core` would resolve on this network AND on Global's
-    # `frontend` (where Rails' own `core` lives), resolution-order-dependent —
-    # the failure the Global repository recorded in
-    # `notes/implementation/2026-08-11-cloudflare-tunnel-edge-network-join.md`.
-    #
-    # One alias covers every unit because this container serves all twenty on
-    # their own ports. Rails needs one alias per surface only because it
-    # distinguishes them by Host on a single port.
-    networks:
-      default: {}
-      edge-tunnel:
-        aliases:
-          - edge.localhost
-    restart: unless-stopped
+      - '127.0.0.1:5101:5101'
+  com-info:
+    <<: *unit
+    working_dir: '/home/edge/workspace/com/info'
+    ports:
+      - '127.0.0.1:5103:5103'
+  com-core:
+    <<: *unit
+    working_dir: '/home/edge/workspace/com/core'
+    ports:
+      - '127.0.0.1:5105:5105'
+  com-docs:
+    <<: *unit
+    working_dir: '/home/edge/workspace/com/docs'
+    ports:
+      - '127.0.0.1:5106:5106'
+  com-news:
+    <<: *unit
+    working_dir: '/home/edge/workspace/com/news'
+    ports:
+      - '127.0.0.1:5107:5107'
+  com-help:
+    <<: *unit
+    working_dir: '/home/edge/workspace/com/help'
+    ports:
+      - '127.0.0.1:5108:5108'
+  net-apex:
+    <<: *unit
+    working_dir: '/home/edge/workspace/net/apex'
+    ports:
+      - '127.0.0.1:5201:5201'
+  org-apex:
+    <<: *unit
+    working_dir: '/home/edge/workspace/org/apex'
+    ports:
+      - '127.0.0.1:5301:5301'
+  org-info:
+    <<: *unit
+    working_dir: '/home/edge/workspace/org/info'
+    ports:
+      - '127.0.0.1:5303:5303'
+  org-core:
+    <<: *unit
+    working_dir: '/home/edge/workspace/org/core'
+    ports:
+      - '127.0.0.1:5305:5305'
+  org-docs:
+    <<: *unit
+    working_dir: '/home/edge/workspace/org/docs'
+    ports:
+      - '127.0.0.1:5306:5306'
+  org-news:
+    <<: *unit
+    working_dir: '/home/edge/workspace/org/news'
+    ports:
+      - '127.0.0.1:5307:5307'
+  org-help:
+    <<: *unit
+    working_dir: '/home/edge/workspace/org/help'
+    ports:
+      - '127.0.0.1:5308:5308'
+  app-apex:
+    <<: *unit
+    working_dir: '/home/edge/workspace/app/apex'
+    ports:
+      - '127.0.0.1:5401:5401'
+  app-info:
+    <<: *unit
+    working_dir: '/home/edge/workspace/app/info'
+    ports:
+      - '127.0.0.1:5403:5403'
+  app-core:
+    <<: *unit
+    working_dir: '/home/edge/workspace/app/core'
+    ports:
+      - '127.0.0.1:5405:5405'
+  app-docs:
+    <<: *unit
+    working_dir: '/home/edge/workspace/app/docs'
+    ports:
+      - '127.0.0.1:5406:5406'
+  app-news:
+    <<: *unit
+    working_dir: '/home/edge/workspace/app/news'
+    ports:
+      - '127.0.0.1:5407:5407'
+  app-help:
+    <<: *unit
+    working_dir: '/home/edge/workspace/app/help'
+    ports:
+      - '127.0.0.1:5408:5408'
+  dev-apex:
+    <<: *unit
+    working_dir: '/home/edge/workspace/dev/apex'
+    ports:
+      - '127.0.0.1:5501:5501'
 
   # Edge owns this connector and its tunnel. It is intentionally independent from the
   # Global/Rails connector: the two share neither a Podman network nor a tunnel token.
@@ -175,18 +252,35 @@ services:
     image: docker.io/cloudflare/cloudflared:2026.8.2
     command: tunnel --protocol quic --metrics 0.0.0.0:2000 run
     environment:
-      # Prefer the Edge-specific token; a single-tunnel local setup may only have the
-      # generic CLOUDFLARED_TOKEN in .env.
+      # CLOUDFLARED_TOKEN, from THIS repository's gitignored root `.env`. Global
+      # uses the same variable name in its own `.env`; each Compose project reads
+      # the file next to its own compose file, so one name can and must hold two
+      # different tunnels' tokens. What is forbidden is the same VALUE in both.
       #
-      # Neither carries a `:?` guard, and that is not an oversight. Compose
-      # interpolates the whole file whichever services you name, so a required
-      # variable here would stop `podman compose -f compose.yaml up core` on every
-      # machine that never intends to run a tunnel — which, now that the connector
-      # is shared rather than an opt-in overlay, is most of them. The requirement is
-      # enforced where it is actually a requirement: `scripts/dev-start --tunnel`
-      # refuses to start without a token, and cloudflared itself exits non-zero on
+      # There is exactly one variable and no fallback chain. Until 2026-09-04 this
+      # read `${EDGE_CLOUDFLARED_TOKEN:-${CLOUDFLARED_TOKEN:-}}`, and on a machine
+      # that had only Global's value it resolved silently to Global's token, so
+      # this connector joined Global's tunnel as a replica from a network with no
+      # route to Rails. Cloudflare cannot tell such a replica from a healthy one —
+      # a tunnel token is a "join this tunnel" credential — and requests go to the
+      # nearest replica rather than being load-balanced, so both repositories
+      # failed intermittently at once. An unset token must leave this tunnel down,
+      # never take over another one. See adr/014-edge-owned-development-tunnel.md.
+      #
+      # Because the variable name no longer distinguishes the two repositories,
+      # `scripts/dev-start --tunnel` compares the tunnel UUID inside this token
+      # against every cloudflared container already running on the host and
+      # refuses to add a second connector to one tunnel.
+      #
+      # No `:?` guard, and that is not an oversight. Compose interpolates the
+      # whole file whichever services you name, so a required variable here would
+      # stop `podman compose -f compose.yaml up core` on every machine that never
+      # intends to run a tunnel — which, now that the connector is shared rather
+      # than an opt-in overlay, is most of them. The requirement is enforced where
+      # it is actually a requirement: `scripts/dev-start --tunnel` refuses to
+      # start without CLOUDFLARED_TOKEN, and cloudflared itself exits non-zero on
       # an empty one, bounded by `restart: on-failure:3`.
-      TUNNEL_TOKEN: '${EDGE_CLOUDFLARED_TOKEN:-${CLOUDFLARED_TOKEN:-}}'
+      TUNNEL_TOKEN: '${CLOUDFLARED_TOKEN:-}'
     restart: on-failure:3
     cpus: 0.5
     mem_limit: 256m

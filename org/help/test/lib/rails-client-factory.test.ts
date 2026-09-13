@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import { PRIVATE_RAILS_ORIGIN } from '../../src/lib/publishing-cell';
 import { createRailsClient, type RailsFetcher } from '../../src/lib/rails-client';
 
 function makeBinding(response: Response | Error) {
@@ -12,21 +13,21 @@ function makeBinding(response: Response | Error) {
   return { fetch } satisfies RailsFetcher;
 }
 
-describe('org/help rails client factory', () => {
+describe('rails client factory', () => {
   it('always requests against the fixed hostname regardless of caller input', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health');
 
     const [requestUrl] = binding.fetch.mock.calls[0] as [string, RequestInit];
-    expect(new URL(requestUrl).hostname).toBe('help.org.localhost');
+    expect(new URL(requestUrl).hostname).toBe(new URL(PRIVATE_RAILS_ORIGIN).hostname);
     expect(new URL(requestUrl).port).toBe('3000');
   });
 
   it('rejects an absolute URL from the caller instead of redirecting the origin', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     const result = await client.fetch('http://evil.example.com/steal');
 
@@ -36,7 +37,7 @@ describe('org/help rails client factory', () => {
 
   it('rejects a protocol-relative path', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     const result = await client.fetch('//evil.example.com/steal');
 
@@ -46,19 +47,19 @@ describe('org/help rails client factory', () => {
 
   it('combines a relative path with the fixed origin correctly', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/widgets?limit=10');
 
     const [requestUrl] = binding.fetch.mock.calls[0] as [string, RequestInit];
-    expect(requestUrl).toBe('http://help.org.localhost:3000/edge/v0/widgets?limit=10');
+    expect(requestUrl).toBe(`${PRIVATE_RAILS_ORIGIN}/edge/v0/widgets?limit=10`);
   });
 
   it.each(['', 'no-leading-slash', '/\\evil.com', '/path\0withnull'])(
     'rejects malformed path %j',
     async (path) => {
       const binding = makeBinding(new Response('ok', { status: 200 }));
-      const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+      const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
       const result = await client.fetch(path);
 
@@ -69,7 +70,7 @@ describe('org/help rails client factory', () => {
 
   it('supplies a bounded timeout signal on every request', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health');
 
@@ -79,7 +80,7 @@ describe('org/help rails client factory', () => {
 
   it('does not forward browser cookies by default', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health', { headers: { cookie: 'session=secret' } });
 
@@ -90,7 +91,7 @@ describe('org/help rails client factory', () => {
 
   it('does not forward Authorization by default', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health', { headers: { authorization: 'Bearer secret' } });
 
@@ -101,7 +102,7 @@ describe('org/help rails client factory', () => {
 
   it('strips Cloudflare Access headers even if a caller supplies them', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health', {
       headers: {
@@ -118,7 +119,7 @@ describe('org/help rails client factory', () => {
 
   it('produces a typed http-error result for non-2xx responses', async () => {
     const binding = makeBinding(new Response('nope', { status: 500 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     const result = await client.fetch('/edge/v0/health');
 
@@ -141,9 +142,9 @@ describe('org/help rails client factory', () => {
         headers: { 'content-type': 'text/plain;charset=UTF-8' },
       }),
     );
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
-    const result = await client.fetch('/health/liveness.json');
+    const result = await client.fetch('/api/v0/health.json');
 
     expect(result.kind).toBe('unreachable');
     if (result.kind === 'unreachable') {
@@ -156,16 +157,16 @@ describe('org/help rails client factory', () => {
     const binding = makeBinding(
       new Response('boom', { status: 500, headers: { 'content-type': 'text/html' } }),
     );
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
-    const result = await client.fetch('/health/liveness.json');
+    const result = await client.fetch('/api/v0/health.json');
 
     expect(result.kind).toBe('http-error');
   });
 
   it('produces a bounded ok result for successful responses', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     const result = await client.fetch('/edge/v0/health');
 
@@ -177,7 +178,7 @@ describe('org/help rails client factory', () => {
 
   it('produces an unreachable result when the binding fetch rejects', async () => {
     const binding = makeBinding(new Error('network down'));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     const result = await client.fetch('/edge/v0/health');
 
@@ -186,7 +187,7 @@ describe('org/help rails client factory', () => {
 
   it('never requests caching', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health');
 
@@ -195,7 +196,7 @@ describe('org/help rails client factory', () => {
   });
   it('forwards method and body when the caller supplies them', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/widgets', { method: 'POST', body: 'payload' });
 
@@ -206,7 +207,7 @@ describe('org/help rails client factory', () => {
 
   it('omits method and body entirely when the caller supplies neither', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
     await client.fetch('/edge/v0/health');
 
@@ -219,11 +220,11 @@ describe('org/help rails client factory', () => {
   // reintroduced here would produce 404s that read as a Rails outage.
   it('sends the path through unchanged, with no frame prefix', async () => {
     const binding = makeBinding(new Response('ok', { status: 200 }));
-    const client = createRailsClient(binding, 'http://help.org.localhost:3000');
+    const client = createRailsClient(binding, PRIVATE_RAILS_ORIGIN);
 
-    await client.fetch('/health/liveness.json');
+    await client.fetch('/api/v0/health.json');
 
     const [requestUrl] = binding.fetch.mock.calls[0] as [string, RequestInit];
-    expect(requestUrl).toBe('http://help.org.localhost:3000/health/liveness.json');
+    expect(requestUrl).toBe(`${PRIVATE_RAILS_ORIGIN}/api/v0/health.json`);
   });
 });

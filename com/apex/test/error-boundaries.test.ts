@@ -3,8 +3,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createApexApp } from '../src/create-apex-app';
 
-const service = 'com';
-
 afterEach(() => vi.restoreAllMocks());
 
 /*
@@ -17,14 +15,11 @@ afterEach(() => vi.restoreAllMocks());
  */
 describe('apex error boundary', () => {
   it('preserves deliberate HTTP errors from page routes', async () => {
-    const app = createApexApp(
-      (routes) => {
-        routes.get('/forbidden', () => {
-          throw new HTTPException(403, { message: 'Forbidden' });
-        });
-      },
-      { service },
-    );
+    const app = createApexApp((routes) => {
+      routes.get('/forbidden', () => {
+        throw new HTTPException(403, { message: 'Forbidden' });
+      });
+    });
 
     const response = await app.request('/forbidden');
     expect(response.status).toBe(403);
@@ -33,14 +28,11 @@ describe('apex error boundary', () => {
 
   it('contains unexpected errors without leaking details', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const app = createApexApp(
-      (routes) => {
-        routes.get('/explode', () => {
-          throw new Error('secret failure details');
-        });
-      },
-      { service },
-    );
+    const app = createApexApp((routes) => {
+      routes.get('/explode', () => {
+        throw new Error('secret failure details');
+      });
+    });
 
     const response = await app.request('/explode');
     expect(response.status).toBe(500);
@@ -54,9 +46,9 @@ describe('apex error boundary', () => {
   });
 
   it('stops request processing when the rate limiter rejects the caller', async () => {
-    const app = createApexApp(() => undefined, { service });
+    const app = createApexApp(() => undefined);
     const response = await app.request(
-      '/health',
+      '/about',
       { headers: { 'cf-connecting-ip': '192.0.2.10' } },
       { RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: false }) } },
     );

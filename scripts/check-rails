@@ -18,16 +18,92 @@ if [[ -e compose.override.yaml ]]; then
   override=(-f compose.override.yaml)
 fi
 
+check_one() {
+  local origin="$1"
+  local url="${origin}/api/v0/health.json"
+  local output
+  if ! output="$(podman compose -f compose.yaml "${override[@]}" exec -T core \
+    curl --silent --show-error --max-time 10 --write-out '\n%{http_code}' \
+    --header 'Accept: application/json' "${url}")"; then
+    echo "FAIL ${url}: unreachable (curl failed)" >&2
+    exit 1
+  fi
+
+  printf '%s' "${output}" | node --input-type=module - "${url}" <<'NODE'
+import { readFileSync } from 'node:fs';
+
+const url = process.argv[2];
+const raw = readFileSync(0, 'utf8');
+const nl = raw.lastIndexOf('\n');
+const body = nl === -1 ? '' : raw.slice(0, nl);
+const httpStatus = Number(nl === -1 ? raw : raw.slice(nl + 1));
+
+function fail(message) {
+  process.stderr.write(`FAIL ${url}: ${message}\n`);
+  process.exit(1);
+}
+
+if (!Number.isInteger(httpStatus) || httpStatus === 0) {
+  fail('unreachable (no HTTP response)');
+}
+
+if (httpStatus !== 200 && httpStatus !== 503) {
+  fail(`http-error HTTP ${httpStatus} (not the Health API contract)`);
+}
+
+let parsed;
+try {
+  parsed = JSON.parse(body);
+} catch {
+  fail(`invalid-contract HTTP ${httpStatus} (body is not JSON)`);
+}
+
+const statuses = new Set(['pass', 'warn', 'fail']);
+const check = (value) =>
+  typeof value === 'object' && value !== null && statuses.has(value.status);
+
+// Kept identical to `TIMEZONE_AWARE_TIMESTAMP` in the fifteen
+// `src/lib/rails-health.ts` copies, and pinned as such by
+// `test/rails-connection-invariants.test.ts`. A bare local time is rejected:
+// two sides of a tunnel do not share a clock offset, so a timestamp without a
+// zone cannot be compared with anything.
+const TIMEZONE_AWARE_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+const isTimezoneAwareTimestamp = (value) =>
+  typeof value === 'string' &&
+  TIMEZONE_AWARE_TIMESTAMP.test(value) &&
+  !Number.isNaN(Date.parse(value));
+
+if (
+  typeof parsed !== 'object' ||
+  parsed === null ||
+  !statuses.has(parsed.status) ||
+  !isTimezoneAwareTimestamp(parsed.timestamp) ||
+  typeof parsed.checks !== 'object' ||
+  parsed.checks === null ||
+  !check(parsed.checks.startup) ||
+  !check(parsed.checks.liveness) ||
+  !check(parsed.checks.readiness)
+) {
+  fail(`invalid-contract HTTP ${httpStatus} (required Health API fields)`);
+}
+
+if (httpStatus === 200 && (parsed.status === 'pass' || parsed.status === 'warn')) {
+  process.stdout.write(`PASS ${url} status=${parsed.status}\n`);
+  process.exit(0);
+}
+
+if (httpStatus === 503 && parsed.status === 'fail') {
+  fail('Rails reached, status=fail');
+}
+
+fail(`invalid-contract HTTP ${httpStatus} status=${parsed.status}`);
+NODE
+}
+
 for brand in app com org; do
   for frame in core docs help info news; do
     origin="http://${frame}.${brand}.localhost:3000"
-    if podman compose -f compose.yaml "${override[@]}" exec -T core \
-      curl --fail --silent --show-error --max-time 10 --output /dev/null \
-      "${origin}/health/liveness.json"; then
-      echo "PASS ${origin}"
-    else
-      echo "FAIL ${origin}" >&2
-      exit 1
-    fi
+    check_one "${origin}"
   done
 done

@@ -32,16 +32,18 @@ xpath "string(//title)" not matches /Umaxica|umaxica/
 GET {{base}}/health
 HTTP 200
 [Asserts]
+header "content-type" == "text/plain; charset=utf-8"
+body not contains "<title"
+
+# `/health.html` is a 404 HTML document, not a health page.
+GET {{base}}/health.html
+HTTP 404
+[Asserts]
+header "content-type" == "text/html; charset=UTF-8"
+header "content-type" not contains "json"
 xpath "count(//title)" == 1
 xpath "string(//title)" matches /^.+ — UMAXICA \(NET\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
-
-GET {{base}}/health.html
-HTTP 200
-[Asserts]
-xpath "count(//title)" == 1
-xpath "string(//title)" matches /^.+ — UMAXICA \(NET\)$/
-
 GET {{base}}/offline
 HTTP 200
 [Asserts]
@@ -57,34 +59,28 @@ xpath "string(//title)" matches /^.+ — UMAXICA \(NET\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
 
-# The contract applies to HTML and must leave the JSON surfaces alone: a `title`
-# key appearing in either payload would mean the renderer had reached a response
-# it does not own. The exact key sets are pinned for the same reason — these two
-# are consumed by machines, so an added or dropped field is a breaking change.
+# `/health.json` is not a machine-readable health document. It is a 404 HTML
+# page and still has to satisfy the title contract — the renderer must not
+# invent a JSON body when the client asks for this path.
 GET {{base}}/health.json
+HTTP 404
+[Asserts]
+header "content-type" == "text/html; charset=UTF-8"
+header "content-type" not contains "json"
+xpath "count(//title)" == 1
+xpath "string(//title)" matches /^.+ — UMAXICA \(NET\)$/
+xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
+
+# Structured identity is JSON and must not grow a `title` from the HTML renderer.
+GET {{base}}/api/v0/revision.json
 HTTP 200
 [Asserts]
 header "content-type" matches /^application\/json/
-jsonpath "$.status" exists
-jsonpath "$.service" exists
-jsonpath "$.version" exists
-jsonpath "$.environment" not exists
-jsonpath "$.edge" exists
-jsonpath "$.time" exists
 jsonpath "$.title" not exists
-# The exact key count, not just the presence of each key. `exists` cannot see an
-# ADDED field, and this payload is consumed by machines, so a new key is as much
-# a breaking change as a dropped one. Moved here from Guard C of
-# `test/html-title-contract.test.ts`, which asserted the same set with
-# `Object.keys().sort()` against an in-process response.
-jsonpath "$.*" count == 5
+jsonpath "$.*" count == 3
 
 GET {{base}}/revision
 HTTP 200
 [Asserts]
-header "content-type" matches /^application\/json/
-jsonpath "$.id" exists
-jsonpath "$.tag" exists
-jsonpath "$.timestamp" exists
-jsonpath "$.title" not exists
-jsonpath "$.*" count == 3
+header "content-type" matches /^text\/plain/
+body not contains "<title"

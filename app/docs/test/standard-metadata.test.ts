@@ -4,64 +4,72 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CANONICAL_ORIGIN } from '../src/lib/canonical';
+import { CANONICAL_ORIGINS, PUBLISHING_AUDIENCE } from '../src/lib/publishing-cell';
+import { siteCopy } from '../src/lib/site-copy';
 import { handlers } from './utils/routes';
 
-const host = 'docs-jp.umaxica.app';
 const unitRoot = resolve(import.meta.dirname, '..');
 
 /*
- * Next generated robots.txt, sitemap.xml and the manifest from its Metadata
- * Route convention, so the old version of this file could call the generator and
- * assert on the object it returned. They are ordinary server routes now, so each
- * is asserted on the response — which is also where the `Content-Type` Next used
- * to infer is now stated explicitly, and therefore worth pinning.
+ * robots.txt, sitemap.xml and the manifest are ordinary server routes, so each
+ * is asserted on the response — including the `Content-Type` each states
+ * explicitly because nothing else infers it.
  */
 describe('standard metadata', () => {
-  it('keeps robots and sitemap on the canonical host', async () => {
-    expect(CANONICAL_ORIGIN).toBe(`https://${host}`);
+  it('uses the jp origin when no region is built in', () => {
+    expect(CANONICAL_ORIGIN).toBe(CANONICAL_ORIGINS.jp);
+  });
 
+  it('keeps robots and sitemap on the canonical host, with ja/en alternates', async () => {
     const robots = await handlers.robots();
     expect(robots.headers.get('content-type')).toContain('text/plain');
     const robotsBody = await robots.text();
     expect(robotsBody).toContain('User-Agent: *');
     expect(robotsBody).toContain('Allow: /');
-    expect(robotsBody).toContain(`Sitemap: https://${host}/sitemap.xml`);
+    expect(robotsBody).toContain(`Sitemap: ${CANONICAL_ORIGIN}/sitemap.xml`);
 
     const sitemap = await handlers.sitemap();
     expect(sitemap.headers.get('content-type')).toContain('xml');
-    const sitemapBody = await sitemap.text();
-    expect(sitemapBody).toContain(`<loc>https://${host}/</loc>`);
-    expect(sitemapBody).toContain('<changefreq>weekly</changefreq>');
-    expect(sitemapBody).toContain('<priority>0.5</priority>');
+    const body = await sitemap.text();
+    for (const path of ['/ja/', '/en/', '/ja/entries/', '/en/search/', '/ja/about/']) {
+      expect(body).toContain(`<loc>${CANONICAL_ORIGIN}${path}</loc>`);
+    }
+    expect(body).toContain(`hreflang="en" href="${CANONICAL_ORIGIN}/en/entries/"`);
+    expect(body).not.toContain('/page/1/');
+    expect(body).not.toContain('localhost');
   });
 
-  it('publishes the minimal manifest and lightweight health response', async () => {
+  it('publishes the manifest for this cell', async () => {
     const manifest = await handlers.manifest();
     expect(manifest.headers.get('content-type')).toContain('application/manifest+json');
     await expect(manifest.json()).resolves.toMatchObject({
-      name: 'UMAXICA Docs (app)',
-      start_url: '/',
+      name: `UMAXICA ${siteCopy('ja').product} (${PUBLISHING_AUDIENCE})`,
+      start_url: '/ja/',
       display: 'standalone',
       icons: [expect.objectContaining({ src: '/favicon.ico' })],
     });
-
-    // `/health` itself — shape, both status halves and the absence of any Rails
-    // detail — is covered by `test/health-route.test.ts`. Here it is only
-    // asserted that the route exists and is the JSON, no-store surface this
-    // frame's metadata promises.
-    const response = await handlers.health();
-    expect(response.headers.get('content-type')).toContain('application/json');
-    expect(response.headers.get('cache-control')).toContain('no-store');
   });
 
-  it('contains the required browser assets', () => {
-    // The favicon moved out of `src/app/` when the App Router convention went
-    // away; it is an ordinary static asset now, served by Cloudflare before the
-    // Worker runs.
+  it('negotiates / onto a locale with an uncacheable 302', async () => {
+    const ja = await handlers.root(
+      new Request('https://example.test/', { headers: { 'accept-language': 'ja,en;q=0.8' } }),
+    );
+    expect(ja.status).toBe(302);
+    expect(ja.headers.get('location')).toBe('https://example.test/ja/');
+    expect(ja.headers.get('vary')).toBe('Accept-Language');
+    expect(ja.headers.get('cache-control')).toBe('no-store');
+
+    const en = await handlers.root(
+      new Request('https://example.test/', { headers: { 'accept-language': 'en-US' } }),
+    );
+    expect(en.headers.get('location')).toBe('https://example.test/en/');
+  });
+
+  it('ships the browser assets the documents reference', () => {
     expect(statSync(resolve(unitRoot, 'public/favicon.ico')).size).toBeGreaterThan(0);
     const worker = readFileSync(resolve(unitRoot, 'public/service-worker.js'), 'utf8');
     expect(worker).toContain("event.request.mode !== 'navigate'");
     expect(worker).toContain('fetch(event.request).catch');
-    expect(worker).toContain('cache.add(OFFLINE_URL)');
+    expect(worker).toContain("const OFFLINE_URL = '/offline'");
   });
 });

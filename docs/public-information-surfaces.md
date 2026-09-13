@@ -9,11 +9,14 @@ differ in what they are allowed to do rather than in what they are built with.
 > rejected an Astro move for the content frames and stays `Rejected` as history.
 > `adr/015-public-content-surfaces-astro.md` (2026-09-02) is the new record that
 > `adr/013` invited: the **twelve** public content surfaces
-> (`{app,com,org}/{docs,help,info,news}`) move to Astro, partially superseding
+> (`{app,com,org}/{docs,help,info,news}`) are Astro, partially superseding
 > `adr/013` for those units. The three `*/core` units stay on TanStack Start and
-> the five `*/apex` Workers stay on Hono (`adr/011`). Migration is in progress
-> (Phase 1 + 2 done, juxtaposed, not deployed); the Rails-managed-document SSR
-> layer is designed in `adr/015` but pending the Rails public read contract.
+> the five `*/apex` Workers stay on Hono (`adr/011`). Language is a URL prefix
+> (`/ja/`, `/en/`) because Astro i18n needs it; region is **not** a path
+> (`PUBLIC_REGION` at build time — no `/jp/`). See `adr/015` § i18n / region.
+> The Rails-managed-document SSR layer is designed in `adr/015` and scheduled
+> in `plans/astro-content-surfaces-remaining.md`; it is pending the Rails
+> public read contract.
 
 ## Surface Matrix
 
@@ -25,10 +28,9 @@ differ in what they are allowed to do rather than in what they are built with.
 
 ## Framework Ownership
 
-All fifteen frames run **TanStack Start on Vite and Cloudflare Workers**. There
-is no framework boundary between a core and a satellite, and introducing one is a
-decision that needs its own ADR — `adr/004` rejected the last attempt, and
-`adr/013` records why one stack across all fifteen is worth keeping.
+The twelve public content surfaces run **Astro**. The three cores run
+**TanStack Start**. The five apex workers run **Hono**. That split is `adr/015`;
+`adr/004` stays `Rejected` as history.
 
 What differs between the two archetypes is capability, and it is deliberate:
 
@@ -65,15 +67,30 @@ fails a surface that declares a binding its class is not allowed to hold.
 
 ## Implementation State
 
-All fifteen frames — cores and satellites alike — are classified
-`railsBackedVite` in `tools/workers-manifest.json` and carry the VPC binding.
-On the twelve public surfaces the only thing that binding is used for today is
-`/health`: `src/lib/rails-client.ts` and `src/lib/rails-health.ts` report Rails
-liveness alongside Edge state (ADR 009). **No public surface fetches content from
-Rails yet**, so the narrow contract above is a boundary that has not been tested
-against a real consumer.
+The three cores are classified `railsBackedVite` and the twelve public surfaces
+`railsBackedAstro` in `tools/workers-manifest.json`. All fifteen carry the VPC
+binding.
+On the twelve public surfaces the VPC binding is used for `/health` (ADR 016)
+and for **publishing pages**: `/{lang}/entries/` and `/{lang}/entries/{public_id}/`
+are on-demand Astro SSR routes that call the existing `getRailsClient()` on every
+request. Rails remains the publishing authority for persistence, management UI,
+create/update, revisions, publication, archive, and authorization. Astro is
+anonymous and read-only. Collection pagination is page-based: `/{lang}/entries/?page=N`
+causes Edge to request `GET /api/v0/entries?locale={lang}&page=N`. Edge does not
+calculate SQL OFFSET; Pagy is a Rails implementation detail. Page 1 is
+`/{lang}/entries/`. Identity is `public_id` on both the public URL and the Rails
+management member URL. Language homes `/{lang}/` are prerendered SSG and link to
+`/{lang}/entries/`. `/{lang}/about/` stays static with no Rails hop. There is no
+publishing SSG of Entry pages, no browser-side Rails fetch, and no
+application-level publishing cache in this phase (`docs/caching-and-isr.md`
+Phase 2 remains future work).
 
-When content fetching lands, it lands inside that existing client rather than
-beside it, and `docs/caching-and-isr.md` is the open question that has to be
-answered in the same change — there is no caching layer in front of these
-surfaces today.
+Public collection and entry pages always expose a Manage / Edit link to the
+browser-facing Rails Base.Org staff origin (`RAILS_STAFF_BASE_ORIGIN`), for example
+`{origin}/publishing/{surface}/{audience}/entries` and
+`{origin}/publishing/{surface}/{audience}/entries/{public_id}/edit`. The link is
+not gated on Edge authentication. Rails performs sign-in and authorization after
+navigation. That origin is not the Worker-to-Rails VPC transport.
+
+`org/core` `/publishing` is the authenticated operator launcher for the same
+twelve Rails management indexes. It does not implement Publishing mutations.

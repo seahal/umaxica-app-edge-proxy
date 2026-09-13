@@ -1,6 +1,10 @@
 # ADR 009: One health entry point, and an operable Rails dispatch
 
-## Status: Implemented
+## Status: Implemented — decision 3 amended by [ADR 016](016-rails-machine-health-api.md)
+
+Edge still owns a single public `/health` entry point (this record). The Rails
+upstream path is no longer `/health/liveness.json`; it is
+`GET /api/v0/health.json`. Historical measurements below are unchanged.
 
 ## Context
 

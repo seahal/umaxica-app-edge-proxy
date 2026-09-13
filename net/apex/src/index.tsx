@@ -13,20 +13,17 @@ import { setMeta } from './seo';
  * `/about` is unchanged and still served: the two say different things, and
  * the footer's utility navigation still points at it.
  */
-const app = createApexApp(
-  (pageRoutes) => {
-    pageRoutes.get('/', timeout(2000), (c) => {
-      setMeta(c, getHomeMeta(c.env, c.get('language')));
-      return c.render(renderHomeContent(c.get('language')));
-    });
+const app = createApexApp((pageRoutes) => {
+  pageRoutes.get('/', timeout(2000), (c) => {
+    setMeta(c, getHomeMeta(c.env, c.get('language')));
+    return c.render(renderHomeContent(c.get('language')));
+  });
 
-    pageRoutes.get('/about', timeout(2000), (c) => {
-      setMeta(c, getAboutMeta(c.env, c.get('language')));
-      return c.render(renderAboutContent(c.get('language')));
-    });
-  },
-  { service: 'net' },
-);
+  pageRoutes.get('/about', timeout(2000), (c) => {
+    setMeta(c, getAboutMeta(c.env, c.get('language')));
+    return c.render(renderAboutContent(c.get('language')));
+  });
+});
 
 // Sentry: to re-enable, wrap app with Sentry.withSentry() and export the handler.
 export default app;

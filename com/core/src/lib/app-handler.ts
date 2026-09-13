@@ -11,7 +11,7 @@ import '../security-nonce-als';
  * The application half of this Worker, behind a one-function seam.
  *
  * `src/worker.ts` classifies the path, rate-limits once, dispatches Rails-owned
- * paths over the VPC binding and strips `Cookie` in and `Set-Cookie` out around
+ * paths to Rails and strips `Cookie` in and `Set-Cookie` out around
  * whatever answers the rest (adr/007-shared-fqdn-core-dispatch.md). It names
  * this module rather than a framework, so which framework renders the
  * application half stays a detail of this file.

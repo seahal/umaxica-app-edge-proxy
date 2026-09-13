@@ -4,7 +4,7 @@
  *
  * `env` is mutable so a test can install exactly the bindings the case is about
  * — a VPC service, a REVISION, a RATE_LIMITER, or none at all — and
- * `src/lib/cloudflare-env.ts` reads it through one accessor, so nothing else has
+ * `src/lib/env.ts` reads it through one accessor, so nothing else has
  * to know this file exists.
  *
  * `setEnvShouldThrow` exists because the routes guard their binding reads with

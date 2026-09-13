@@ -6,11 +6,6 @@ import { expect, test } from '@playwright/test';
  * and exposes its heading to the accessibility tree under a real engine.
  */
 
-test('renders the local Worker health page', async ({ page }) => {
-  await page.goto('/health');
-  await expect(page.getByRole('heading', { name: 'status' })).toBeVisible();
-});
-
 test('renders the local about page', async ({ page }) => {
   await page.goto('/about');
   await expect(page.getByRole('heading', { name: 'About this site.' })).toBeVisible();

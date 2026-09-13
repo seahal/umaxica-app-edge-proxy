@@ -17,15 +17,14 @@
 # that split has to be invisible to a user reading their tab. `apex`, `core`,
 # `hono`, `workers`, `cloudflare`, `next` and friends must not appear.
 #
-# `test/title-contract.test.tsx` keeps the metadata-level rules, which apply to
-# every page's exported `metadata` before a request exists. This file is the
-# other half: that the metadata survives rendering and reaches the wire.
+# `src/lib/title.ts` is the in-process spelling. This file is the other half:
+# that the title survives rendering and reaches the wire.
 
 # The root form is the one place the page segment is optional, and the frames
 # differ: `core` serves the bare brand, while a content frame names itself
 # (`Docs — UMAXICA (APP)`). Both satisfy the contract, so the assertion is the
-# canonical regex from `test/utils/title-contract.ts` rather than a literal.
-GET {{base}}/
+# title regex in the asserts below, rather than a page-title literal.
+GET {{base}}/ja/
 HTTP 200
 [Asserts]
 xpath "count(//title)" == 1
@@ -34,7 +33,16 @@ xpath "string(//title)" matches /^(?:.+ — )?UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 xpath "string(//title)" not matches /Umaxica|umaxica/
 
-GET {{base}}/about
+GET {{base}}/en/
+HTTP 200
+[Asserts]
+xpath "count(//title)" == 1
+xpath "normalize-space(//title)" != ""
+xpath "string(//title)" matches /^(?:.+ — )?UMAXICA \(APP\)$/
+xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
+xpath "string(//title)" not matches /Umaxica|umaxica/
+
+GET {{base}}/ja/about/
 HTTP 200
 [Asserts]
 xpath "count(//title)" == 1
@@ -49,6 +57,19 @@ xpath "count(//title)" == 1
 xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
+GET {{base}}/ja/entries/page/2/
+HTTP *
+[Asserts]
+xpath "count(//title)" == 1
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
+xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
+
+GET {{base}}/en/search/
+HTTP 200
+[Asserts]
+xpath "count(//title)" == 1
+xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
+
 GET {{base}}/__definitely_not_found__
 HTTP 404
 [Asserts]
@@ -57,17 +78,23 @@ xpath "string(//title)" matches /^.+ — UMAXICA \(APP\)$/
 xpath "string(//title)" not matches /(?i)\b(auth|core|apex|side|edge|next|nextjs|hono|workers?|cloudflare|opennext)\b/
 
 
-# The contract applies to HTML and must leave the JSON surfaces alone: a `title`
-# key appearing in either payload would mean the renderer had reached a response
-# it does not own.
-GET {{base}}/revision
+# The contract applies to HTML and must leave machine surfaces alone: a `title`
+# key appearing in the JSON identity payload would mean the renderer had reached
+# a response it does not own.
+GET {{base}}/api/v0/revision.json
 HTTP 200
 [Asserts]
 header "content-type" matches /^application\/json/
 jsonpath "$.title" not exists
 
-GET {{base}}/health
-HTTP *
+GET {{base}}/revision
+HTTP 200
 [Asserts]
-header "content-type" matches /^application\/json/
-jsonpath "$.title" not exists
+header "content-type" matches /^text\/plain/
+body not contains "<title"
+
+GET {{base}}/health
+HTTP 200
+[Asserts]
+header "content-type" == "text/plain; charset=utf-8"
+body not contains "<title"

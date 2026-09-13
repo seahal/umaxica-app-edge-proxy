@@ -1,242 +1,190 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { resetEnv, setEnv, setEnvShouldThrow } from './__mocks__/cloudflare-workers';
+import { checkRailsHealth } from '../src/lib/rails-health';
+import * as runtimeHealth from '../src/lib/runtime-health';
+import { resetEnv, setEnv } from './__mocks__/cloudflare-workers';
 import { handlers } from './utils/routes';
 
 const GET = handlers.health;
 
-/*
- * The unified health entry point: Edge's own state and Rails' liveness in one
- * document, answering 200 only when both halves are ok.
- *
- * This file replaced `test/rails-health-route.test.ts`, deleted along with the
- * `/rails-health` route it covered. It is byte-identical across all fifteen
- * frames, like the route it tests. The environment is installed through
- * `cloudflare:workers`, which exposes a plain `env` object.
- */
-
-const REVISION = { id: 'rev-id', tag: 'rev-tag', timestamp: 'built-at' };
-
-function railsAnswers(response: Response) {
-  const fetch = vi.fn(() => Promise.resolve(response));
-  setEnv({ REVISION, UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
-  return fetch;
-}
-
-function railsRejects(error: unknown) {
-  const fetch = vi.fn(() => Promise.reject(error));
-  setEnv({ REVISION, UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
-  return fetch;
-}
-
-function noTransport() {
-  setEnv({ REVISION });
-}
-
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
-});
-
 afterEach(() => {
-  vi.useRealTimers();
   vi.restoreAllMocks();
   resetEnv();
 });
 
-describe('health route: both halves ok', () => {
-  it('answers 200 with the Edge revision and the Rails liveness report', async () => {
-    const fetch = railsAnswers(new Response('{}', { status: 200 }));
+function expectPlainHealth(response: Response) {
+  expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+  expect(response.headers.get('cache-control')).toBe('no-store');
+}
 
-    const response = await GET();
+const PASS_DOCUMENT = {
+  status: 'pass',
+  timestamp: '2026-09-05T09:33:29Z',
+  checks: {
+    startup: { status: 'pass' },
+    liveness: { status: 'pass' },
+    readiness: { status: 'pass' },
+  },
+};
+
+const EDGE_SELF_HEALTH_DOCUMENT = {
+  status: 'pass',
+  checks: {
+    startup: { status: 'pass' },
+    liveness: { status: 'pass' },
+    readiness: { status: 'pass' },
+  },
+};
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+describe('health probes', () => {
+  it('answers 200 text/plain on all four URLs when Rails is not configured', async () => {
+    for (const get of [GET, handlers.startups, handlers.livenesses, handlers.readinesses]) {
+      const response = await get();
+      expect(response.status).toBe(200);
+      expectPlainHealth(response);
+      const body = await response.text();
+      expect(body).not.toContain('{');
+      expect(body).not.toContain('<html');
+    }
+  });
+
+  it('returns ok bodies for individual probes and the aggregate document', async () => {
+    await expect((await handlers.startups()).text()).resolves.toBe('ok\n');
+    await expect((await handlers.livenesses()).text()).resolves.toBe('ok\n');
+    await expect((await handlers.readinesses()).text()).resolves.toBe('ok\n');
+    await expect((await GET()).text()).resolves.toBe(
+      'status: ok\nstartup: ok\nliveness: ok\nreadiness: ok\n',
+    );
+  });
+
+  it('answers 503 when isolate readiness fails, without failing liveness', async () => {
+    vi.spyOn(runtimeHealth.runtimeProbes, 'checkReadiness').mockReturnValue('error');
+
+    const ready = await handlers.readinesses();
+    expect(ready.status).toBe(503);
+    await expect(ready.text()).resolves.toBe('error\n');
+
+    const live = await handlers.livenesses();
+    expect(live.status).toBe(200);
+    await expect(live.text()).resolves.toBe('ok\n');
+
+    const aggregate = await GET();
+    expect(aggregate.status).toBe(503);
+    await expect(aggregate.text()).resolves.toBe(
+      'status: error\nstartup: ok\nliveness: ok\nreadiness: error\n',
+    );
+  });
+
+  it('does not probe Rails or any other downstream on liveness', async () => {
+    const fetch = vi.fn(() => Promise.reject(new Error('connect ECONNREFUSED core.app.localhost')));
+    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+
+    const response = await handlers.livenesses();
 
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toBe('no-store, no-cache, must-revalidate');
-    expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
-    await expect(response.json()).resolves.toEqual({
-      status: 'ok',
-      timestamp: '2024-01-01T00:00:00.000Z',
-      edge: { status: 'ok', version: REVISION },
-      rails: { liveness: { kind: 'ok', status: 200 } },
-    });
-    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    const body = await response.text();
+    expect(body).toBe('ok\n');
+    expect(body).not.toContain('ECONNREFUSED');
+    expect(body).not.toContain('core.app.localhost');
   });
 
-  it('probes Rails once, at the unprefixed liveness path, over the VPC binding', async () => {
-    const fetch = railsAnswers(new Response('{}', { status: 200 }));
-
-    await GET();
-
-    expect(fetch).toHaveBeenCalledOnce();
-    const [url] = fetch.mock.calls[0] as unknown as [string];
-    expect(new URL(url).pathname).toBe('/health/liveness.json');
-  });
-
-  it('still answers 200 when the revision binding is absent', async () => {
-    const fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 200 })));
+  it('maps Rails Health API pass onto Edge 200 text/plain', async () => {
+    const fetch = vi.fn(() => Promise.resolve(jsonResponse(200, PASS_DOCUMENT)));
     setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
 
     const response = await GET();
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'ok',
-      // All three fields are undefined, so JSON serialization drops them.
-      edge: { status: 'ok', version: {} },
-    });
-  });
-});
-
-describe('health route: Rails half unhealthy', () => {
-  it('answers 503 when Rails returns an HTTP error, reporting only the status', async () => {
-    railsAnswers(new Response('rails stack trace', { status: 503 }));
-
-    const response = await GET();
+    expect(fetch).toHaveBeenCalled();
+    const requested = String(fetch.mock.calls.at(0)?.at(0));
+    expect(new URL(requested).pathname).toBe('/api/v0/health.json');
     const body = await response.text();
-
-    expect(response.status).toBe(503);
-    expect(JSON.parse(body)).toEqual({
-      status: 'error',
-      timestamp: '2024-01-01T00:00:00.000Z',
-      edge: { status: 'ok', version: REVISION },
-      rails: { liveness: { kind: 'http-error', status: 503 } },
-    });
-    expect(body).not.toContain('rails stack trace');
+    expect(body).toBe('status: ok\nstartup: ok\nliveness: ok\nreadiness: ok\n');
+    expect(body).not.toContain('"status":"pass"');
   });
 
-  it('answers 503 when the VPC binding fetch rejects, without the exception text', async () => {
-    railsRejects(new Error('connect ECONNREFUSED core.app.localhost:3000'));
+  it('maps Rails Health API fail onto Edge 503 without forwarding the JSON', async () => {
+    const fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse(503, {
+          status: 'fail',
+          timestamp: '2026-09-05T09:33:29Z',
+          checks: {
+            startup: { status: 'pass' },
+            liveness: { status: 'pass' },
+            readiness: { status: 'fail' },
+          },
+        }),
+      ),
+    );
+    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
+
+    const aggregate = await GET();
+    const ready = await handlers.readinesses();
+    const live = await handlers.livenesses();
+
+    expect(aggregate.status).toBe(503);
+    expect(ready.status).toBe(503);
+    expect(live.status).toBe(200);
+    const body = await aggregate.text();
+    expect(body).toBe('status: error\nstartup: ok\nliveness: ok\nreadiness: error\n');
+    expect(body).not.toContain('fail');
+    expect(body).not.toContain('{');
+  });
+
+  it('maps Rails unreachable onto Edge 503 readiness', async () => {
+    const fetch = vi.fn(() => Promise.reject(new Error('connect ECONNREFUSED core.app.localhost')));
+    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
 
     const response = await GET();
-    const body = await response.text();
-
     expect(response.status).toBe(503);
-    expect(JSON.parse(body).rails).toEqual({ liveness: { kind: 'unreachable' } });
+    const body = await response.text();
+    expect(body).toContain('readiness: error');
     expect(body).not.toContain('ECONNREFUSED');
     expect(body).not.toContain('core.app.localhost');
   });
 
-  it('answers 503 for the Workers VPC ProxyError 500 without echoing the code', async () => {
-    // Workers VPC does not throw when the origin is unreachable; it answers a
-    // text/plain 500 carrying `ProxyError: <code>`. `rails-client.ts` claims
-    // that as `unreachable` rather than reporting it as a Rails 500.
-    railsAnswers(
-      new Response('ProxyError: connection_refused', {
-        status: 500,
-        headers: { 'content-type': 'text/plain' },
-      }),
+  it('maps an invalid Rails Health API contract onto Edge 503', async () => {
+    const fetch = vi.fn(() =>
+      Promise.resolve(
+        new Response('not json', { status: 200, headers: { 'content-type': 'text/plain' } }),
+      ),
     );
+    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
 
     const response = await GET();
-    const body = await response.text();
-
     expect(response.status).toBe(503);
-    expect(JSON.parse(body).rails).toEqual({ liveness: { kind: 'unreachable' } });
-    expect(body).not.toContain('ProxyError');
-  });
-
-  it('answers 503 with not-configured when no transport exists', async () => {
-    noTransport();
-
-    const response = await GET();
-
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'error',
-      edge: { status: 'ok' },
-      rails: { liveness: { kind: 'not-configured' } },
-    });
-  });
-
-  it('reports not-configured rather than failing when the Cloudflare context is unavailable', async () => {
-    // `getRailsClient()` reads the context and can throw. That is "no
-    // transport", not an Edge fault, so it must not be allowed to escape.
-    setEnvShouldThrow(true);
-
-    const response = await GET();
-
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      edge: { status: 'error' },
-      rails: { liveness: { kind: 'not-configured' } },
-    });
+    expect(await response.text()).not.toContain('not json');
   });
 });
 
-describe('health route: Edge half unhealthy', () => {
-  it('answers 503 and still reports the Rails half when timestamp generation fails', async () => {
-    railsAnswers(new Response('{}', { status: 200 }));
-    vi.spyOn(Date.prototype, 'toISOString').mockImplementationOnce(() => {
-      throw new Error('Date error');
-    });
+describe('Edge self-health API', () => {
+  it('answers pass JSON without calling Rails or fetch', async () => {
+    const fetch = vi.fn(() => Promise.reject(new Error('must not hop')));
+    setEnv({ UMAXICA_APPS_EDGE_CF_WORKERS_VPC: { fetch } });
 
-    const response = await GET();
+    const response = await handlers.healthApi();
 
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toEqual({
-      status: 'error',
-      timestamp: expect.any(String),
-      edge: { status: 'error' },
-      // The Edge half failing must not hide a healthy Rails half.
-      rails: { liveness: { kind: 'ok', status: 200 } },
-    });
-  });
-
-  it('falls back to an HTTP-date timestamp when ISO generation keeps failing', async () => {
-    railsAnswers(new Response('{}', { status: 200 }));
-    vi.spyOn(Date.prototype, 'toISOString').mockImplementation(() => {
-      throw new Error('Date error');
-    });
-
-    const response = await GET();
-
-    expect(response.status).toBe(503);
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'error',
-      timestamp: 'Mon, 01 Jan 2024 00:00:00 GMT',
-      edge: { status: 'error' },
-    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual(EDGE_SELF_HEALTH_DOCUMENT);
   });
 });
 
-describe('health route: information disclosure', () => {
-  const MARKERS = [
-    'session=abc123',
-    'Bearer token-value',
-    'csrf-token-value',
-    '019f5fe0-287f-7040-9f2f-036cb5b21df7',
-    'core.app.localhost',
-    'ProxyError: dns_error',
-  ];
-
-  it.each(MARKERS)('never appears in the response body: %s', async (marker) => {
-    // Reached through every channel a caller controls or an upstream supplies:
-    // a Rails body, a Rails error body, and a thrown transport error.
-    for (const setup of [
-      () => railsAnswers(new Response(marker, { status: 200 })),
-      () => railsAnswers(new Response(marker, { status: 500 })),
-      () =>
-        railsAnswers(
-          new Response(marker, { status: 500, headers: { 'content-type': 'text/plain' } }),
-        ),
-      () => railsRejects(new Error(marker)),
-    ]) {
-      setup();
-      const body = await (await GET()).text();
-      expect(body).not.toContain(marker);
-    }
-  });
-
-  it('never carries an errorMessage field on any path', async () => {
-    for (const setup of [
-      () => railsRejects(new Error('boom')),
-      () => railsAnswers(new Response('boom', { status: 500 })),
-      () => noTransport(),
-    ]) {
-      setup();
-      const body = await (await GET()).text();
-      expect(body).not.toContain('errorMessage');
-      expect(body).not.toContain('reason');
-    }
+describe('rails-health helper stays closed', () => {
+  it('still reports kinds without leaking exception text', async () => {
+    const report = await checkRailsHealth(null);
+    expect(report).toEqual({ kind: 'not-configured' });
   });
 });

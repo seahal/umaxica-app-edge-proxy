@@ -36,6 +36,9 @@ lib-cov
 coverage
 *.lcov
 
+# Vitest 5 writes html/json/junit reporters, attachments and traces here
+.vitest
+
 # nyc test coverage
 .nyc_output
 

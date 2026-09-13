@@ -1,3 +1,5 @@
+import type { ErrorComponentProps } from '@tanstack/react-router';
+
 import { BRAND_TITLE } from '@/lib/title';
 
 /*
@@ -52,7 +54,7 @@ export function NotFoundDocument() {
  * carries all of it — and the shell contract reserves the library for the
  * interactive primitives that would otherwise be built by hand.
  */
-export function ErrorDocument({ reset }: Readonly<{ error: Error; reset: () => void }>) {
+export function ErrorDocument({ reset }: Readonly<ErrorComponentProps>) {
   return (
     <>
       <title>{`現在、このページを表示できません — ${BRAND_TITLE}`}</title>

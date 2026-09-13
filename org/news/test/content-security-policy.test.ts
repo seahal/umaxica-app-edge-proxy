@@ -19,7 +19,7 @@
 // now a parameter — `src/server.ts` passes `import.meta.env.PROD`, which the
 // bundler replaces with a literal — so the test simply calls it twice.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { getRouter } from '../src/router';
 import { securityHeaders, withSecurityHeaders } from '../src/security-headers';
@@ -163,5 +163,71 @@ describe('router nonce', () => {
      * policy naming a real nonce then rejects.
      */
     expect(getRouter().options.ssr).toBeUndefined();
+  });
+});
+
+/*
+ * The seam the Worker uses to replace that store.
+ *
+ * `security-nonce.ts` ships a fallback store — a plain module-level variable
+ * with a save/restore stack — because `node:async_hooks` cannot be imported
+ * from a module the client bundle reaches. It is correct for one call at a
+ * time and wrong for a Worker isolate, which has several requests in flight
+ * at once and would serve them each other's nonces. `security-nonce-als.ts`
+ * calls `installNonceStore` with a real `AsyncLocalStorage` to fix that, and
+ * `src/lib/app-handler.ts` is what imports it.
+ *
+ * Nothing observable changes when the swap silently fails: the fallback still
+ * answers, every test still passes, and the defect only appears under
+ * concurrency in production. So the delegation is asserted here directly.
+ * `app-handler.ts` cannot stand in for it — it resolves TanStack's Worker-only
+ * entry, which is why it is excluded from coverage and mocked in
+ * `worker.test.ts`.
+ *
+ * The module is re-imported through a reset registry because installing a
+ * store mutates state for the whole module instance, and the rest of this file
+ * asserts on the fallback's behaviour.
+ */
+describe('installNonceStore', () => {
+  it('routes both the write and the read through the installed store', async () => {
+    vi.resetModules();
+    const nonce = await import('../src/security-nonce');
+
+    const scopes: string[] = [];
+    nonce.installNonceStore({
+      run: (value, fn) => {
+        scopes.push(value);
+        return fn();
+      },
+      getStore: () => 'read-from-installed-store',
+    });
+
+    expect(nonce.runWithNonce('minted-nonce', () => nonce.getRequestNonce())).toBe(
+      'read-from-installed-store',
+    );
+    expect(scopes).toEqual(['minted-nonce']);
+  });
+
+  it('still runs `fn` unwrapped when there is no nonce, installed store or not', async () => {
+    /*
+     * The development path. `runWithNonce` short-circuits before touching the
+     * store, so entering an `AsyncLocalStorage` scope holding `undefined` --
+     * which `getStore()` cannot tell apart from being outside one -- never
+     * happens.
+     */
+    vi.resetModules();
+    const nonce = await import('../src/security-nonce');
+
+    const scopes: string[] = [];
+    nonce.installNonceStore({
+      run: (value, fn) => {
+        scopes.push(value);
+        return fn();
+      },
+      getStore: () => 'read-from-installed-store',
+    });
+
+    expect(nonce.runWithNonce(undefined, () => 'ran')).toBe('ran');
+    expect(scopes).toEqual([]);
   });
 });

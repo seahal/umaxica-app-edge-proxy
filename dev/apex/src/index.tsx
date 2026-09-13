@@ -15,19 +15,16 @@ import { setMeta } from './seo';
  * redirect here would send the browser straight back — see
  * `docs/operations/net-www-canonicalisation.md`.
  */
-const app = createApexApp(
-  (pageRoutes) => {
-    pageRoutes.get('/', timeout(2000), (c) => {
-      setMeta(c, getHomeMeta(c.env, c.get('language')));
-      return c.render(renderHomeContent(c.get('language')));
-    });
+const app = createApexApp((pageRoutes) => {
+  pageRoutes.get('/', timeout(2000), (c) => {
+    setMeta(c, getHomeMeta(c.env, c.get('language')));
+    return c.render(renderHomeContent(c.get('language')));
+  });
 
-    pageRoutes.get('/about', timeout(2000), (c) => {
-      setMeta(c, getAboutMeta(c.env, c.get('language')));
-      return c.render(renderAboutContent(c.get('language')));
-    });
-  },
-  { service: 'dev' },
-);
+  pageRoutes.get('/about', timeout(2000), (c) => {
+    setMeta(c, getAboutMeta(c.env, c.get('language')));
+    return c.render(renderAboutContent(c.get('language')));
+  });
+});
 
 export default app;

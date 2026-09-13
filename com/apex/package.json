@@ -16,6 +16,7 @@
     "typecheck": "pnpm run cf-typegen && tsc --noEmit",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
+    "test:stress": "vitest run --sequence.shuffle --no-cache",
     "test:api": "node api/run.mjs",
     "test:e2e": "playwright test",
     "knip": "knip --treat-config-hints-as-errors",

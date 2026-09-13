@@ -31,23 +31,37 @@ function trackedUnder(prefix: string): string[] {
 }
 
 /**
- * Every compose file this repository tracks: `compose.yaml` is the complete
- * standard environment -- it carries the SELinux relabel opt-out and the
- * forwarded `GH_TOKEN` -- and `compose.override.yaml.example` documents the
- * OPTIONAL developer-local override. The override itself
- * (`compose.override.yaml`) is gitignored, absent on a fresh clone, and holds
- * arbitrary host-specific edits, so the example is what these assertions can
- * hold. A new compose file would have to be added here to be covered.
+ * Every compose file this repository tracks. `compose.yaml` carries the shared
+ * services and, behind the `app` profile, the twenty dev servers;
+ * `.devcontainer/compose.yaml` carries `core`, the workspace container, which
+ * lives there so a bare `podman compose up` does not start it. Between them they
+ * hold the SELinux relabel opt-out and the forwarded `GH_TOKEN`.
+ * `compose.override.yaml.example` documents the OPTIONAL developer-local
+ * override; the override itself (`compose.override.yaml`) is gitignored, absent
+ * on a fresh clone, and holds arbitrary host-specific edits, so the example is
+ * what these assertions can hold. A new compose file would have to be added here
+ * to be covered.
  */
-const composeFiles = ['compose.yaml', 'compose.override.yaml.example'] as const;
+const composeFiles = [
+  'compose.yaml',
+  '.devcontainer/compose.yaml',
+  'compose.override.yaml.example',
+] as const;
 const compose = composeFiles.map((path) => read(path)).join('\n');
 
 /**
- * One service's block out of `compose.yaml`, so an assertion about the workspace
- * container cannot be satisfied — or violated — by the tunnel connector beside it.
+ * One service's block, from whichever tracked compose file defines it, so an
+ * assertion about the workspace container cannot be satisfied — or violated — by
+ * the tunnel connector or a dev-server service beside it.
  */
 function service(name: string): string {
-  return new RegExp(`^  ${name}:\n((?:    .*\n|\n)*)`, 'mu').exec(read('compose.yaml'))?.[1] ?? '';
+  for (const path of composeFiles) {
+    const block = new RegExp(`^  ${name}:\n((?:    .*\n|\n)*)`, 'mu').exec(read(path))?.[1];
+    if (block !== undefined && block !== '') {
+      return block;
+    }
+  }
+  return '';
 }
 const containerfile = read('Containerfile');
 // Comments explain why Corepack is gone, so assertions about what the image
@@ -211,9 +225,10 @@ describe('development-container security contract', () => {
     expect(instructions, 'the tailscale wrapper escalates').not.toMatch(/\bsudo\b/u);
     expect(instructions).not.toMatch(/--ssh\b|funnel/iu);
 
-    // `.devcontainer/` holds its two JSON files and nothing else. Every script
-    // that used to live beside them is gone, and the wrapper the image needs is
-    // a heredoc in the Containerfile rather than a seventh file here.
+    // `.devcontainer/` holds its two JSON files, plus the Compose file that
+    // defines `core`, and nothing else. Every script that used to live beside
+    // them is gone, and the wrapper the image needs is a heredoc in the
+    // Containerfile rather than another file here.
     //
     // This reads what git tracks, not what `readdirSync` finds. A fresh clone
     // is the thing under test, and only tracked files reach one; a developer's
@@ -222,6 +237,7 @@ describe('development-container security contract', () => {
     // stays invisible -- is not a change to the image's attack surface and
     // must not fail this contract.
     expect(trackedUnder('.devcontainer/'), '.devcontainer/ gained a tracked file').toEqual([
+      'compose.yaml',
       'devcontainer-lock.json',
       'devcontainer.json',
     ]);
@@ -288,16 +304,24 @@ describe('development-container security contract', () => {
      * gitignored `.env` is exactly how it is supposed to get one. What must stay
      * true is that this is the ONLY such interpolation, and that no compose file
      * ever assigns a credential a literal value.
+     *
+     * Comment lines are excluded: only real assignments can leak a credential,
+     * and the comments around the tunnel token quote the withdrawn
+     * `${EDGE_CLOUDFLARED_TOKEN:-${CLOUDFLARED_TOKEN:-}}` fallback in order to
+     * explain why it must not come back.
      */
     const interpolated = read('compose.yaml')
       .split('\n')
-      .filter((line) => /\$\{[^}]*(?:TOKEN|SECRET|API_KEY|PASSWORD)/u.test(line))
-      .map((line) => line.trim());
+      .map((line) => line.trim())
+      .filter((line) => !line.startsWith('#'))
+      .filter((line) => /\$\{[^}]*(?:TOKEN|SECRET|API_KEY|PASSWORD)/u.test(line));
     expect(interpolated).toEqual([
       // The host's gh identity, borrowed rather than copied: no literal, and
       // `:-` so a machine without one still resolves the configuration.
       'GH_TOKEN: ${GH_TOKEN:-}',
-      "TUNNEL_TOKEN: '${EDGE_CLOUDFLARED_TOKEN:-${CLOUDFLARED_TOKEN:-}}'",
+      // One variable, no fallback chain. Global uses this same name in its own
+      // `.env`, for a different tunnel; see adr/014-edge-owned-development-tunnel.md.
+      "TUNNEL_TOKEN: '${CLOUDFLARED_TOKEN:-}'",
     ]);
     for (const path of composeFiles) {
       const literals = read(path)

@@ -12,8 +12,8 @@ import { withSecurityHeaders } from './security-headers';
  * three, so it names no brand. See `adr/007-shared-fqdn-core-dispatch.md`.
  *
  * - Rails-owned paths never reach `appHandler.fetch`: dispatched directly to
- *   Rails over the Workers VPC binding, with the browser's Cookie/CSRF/auth
- *   headers preserved verbatim.
+ *   Rails at `RAILS_ORIGIN`, with the browser's Cookie/CSRF/auth headers
+ *   preserved verbatim.
  * - Blocked paths never reach Rails or the application.
  * - Everything else (the default) is application-owned: the inbound `Cookie`
  *   header is stripped before `appHandler.fetch` is ever called, and any
@@ -38,6 +38,52 @@ import { withSecurityHeaders } from './security-headers';
  */
 
 /**
+ * Every machine-facing path this frame serves.
+ *
+ * Drives `sanitizeHealthRequest` only. Deliberately WIDER than
+ * `isUnmeteredProbe` below: dropping non-ASCII client headers before the
+ * application sees them is free and has nothing to do with what the limiter
+ * counts, so the two questions are asked separately even though the older
+ * spelling answered both with one list.
+ */
+function isHealthPath(pathname: string): boolean {
+  return (
+    pathname === '/health' ||
+    pathname === '/health/startups' ||
+    pathname === '/health/livenesses' ||
+    pathname === '/health/readinesses' ||
+    pathname === '/api/v0/health.json'
+  );
+}
+
+/**
+ * The probes the rate limiter must never see, and the reason the set is this
+ * small.
+ *
+ * Each of these three is a constant: no binding read, no Rails hop, nothing that
+ * can fail. A 429 on one of them is indistinguishable from a dead isolate, so an
+ * endpoint an orchestrator trusts to mean "alive" must not be throttleable.
+ *
+ * `/health` and `/health/readinesses` are deliberately absent. Both fetch Rails
+ * at `RAILS_ORIGIN` (`src/routes/health.ts`,
+ * `src/routes/health.readinesses.ts`), so exempting them publishes an
+ * unauthenticated, uncounted path into the Rails origin — one inbound request,
+ * one outbound Rails request, no ceiling. Readiness is the probe whose job is to
+ * answer "do not send me traffic"; being throttled is a correct answer for it,
+ * and is not a correct answer for liveness or startup.
+ *
+ * The same three paths are the exempt set in every apex `create-apex-app.ts`
+ * and every Astro surface's `src/middleware.ts`. One rule, twenty units.
+ */
+function isUnmeteredProbe(pathname: string): boolean {
+  return (
+    pathname === '/health/startups' ||
+    pathname === '/health/livenesses' ||
+    pathname === '/api/v0/health.json'
+  );
+}
+
+/**
  * Paths the rate limiter does not see.
  *
  * Cloudflare matches static assets BEFORE this Worker runs, so in production
@@ -49,9 +95,16 @@ import { withSecurityHeaders } from './security-headers';
  * route: if one is ever added it is a real Worker route, so a page with many
  * images could spend its whole budget on its own thumbnails — exempt it here at
  * the same time.
+ *
+ * `/revision` and `/api/v0/revision.json` are NOT here. They read a binding and
+ * answer immediately, but they are deployment metadata rather than probes:
+ * nothing operational breaks when one of them is throttled, so there is no
+ * reason to hand out an uncounted Worker invocation on a path anyone can call.
  */
 function isRateLimitExempt(pathname: string): boolean {
-  return pathname.startsWith('/assets/') || pathname === '/favicon.ico';
+  return (
+    pathname.startsWith('/assets/') || pathname === '/favicon.ico' || isUnmeteredProbe(pathname)
+  );
 }
 
 /**
@@ -108,7 +161,7 @@ export default {
       return dispatchToRails(request, env, isProduction);
     }
 
-    const sanitizedRequest = pathname === '/health' ? sanitizeHealthRequest(request) : request;
+    const sanitizedRequest = isHealthPath(pathname) ? sanitizeHealthRequest(request) : request;
     const strippedHeaders = new Headers(sanitizedRequest.headers);
     strippedHeaders.delete('cookie');
     const strippedRequest = new Request(sanitizedRequest, { headers: strippedHeaders });

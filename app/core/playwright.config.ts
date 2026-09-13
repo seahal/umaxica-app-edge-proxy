@@ -20,14 +20,12 @@ export default defineConfig({
   webServer: {
     command: 'pnpm run dev',
     /*
-     * Readiness is `/` and not `/health`: this frame's `/health` is a UNIFIED
-     * document — its own state and Rails' liveness — and it answers 503 when
-     * Rails is absent, which is the normal case for a local browser run.
-     * Playwright treats only 2xx/3xx/4xx as ready, so waiting on `/health` here
-     * meant burning the full timeout and then failing on a server that had been
-     * up the whole time.
+     * `/health` is the live text/plain probe and answers 200 once the Worker
+     * can serve. It no longer depends on Rails, so it is a valid Playwright
+     * readiness URL (2xx). `/` still works, but a 500 on `/` would look like
+     * "server not up" while the process is running.
      */
-    url: 'http://localhost:5405/',
+    url: 'http://localhost:5405/health',
     reuseExistingServer: !process.env['CI'],
     timeout: 240_000,
   },

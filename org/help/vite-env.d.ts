@@ -3,7 +3,7 @@
  *
  * Referencing `vite/client` wholesale would pull in declarations for every asset
  * type Vite knows about; this unit imports exactly one, the compiled stylesheet
- * URL, and reads exactly three build-mode flags.
+ * URL, and reads three build-mode flags plus the build-time region.
  *
  * It lives at the unit root rather than in `src/`: a `.d.ts` whose basename
  * matches a sibling `.ts` is treated by TypeScript as that file's generated
@@ -19,6 +19,8 @@ interface ImportMetaEnv {
   readonly MODE: string;
   readonly PROD: boolean;
   readonly DEV: boolean;
+  /** `'jp'` or `'us'`, replaced with a literal by `vite.config.ts`. */
+  readonly PUBLIC_REGION?: string;
 }
 
 interface ImportMeta {

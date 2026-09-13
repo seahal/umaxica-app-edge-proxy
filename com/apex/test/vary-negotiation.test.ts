@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import { createApexApp } from '../src/create-apex-app';
 
-const service = 'com';
-
 /*
  * `Vary` is appended to, never assigned.
  *
@@ -19,15 +17,12 @@ const service = 'com';
  */
 describe('vary on negotiation', () => {
   const appWith = (vary?: string) =>
-    createApexApp(
-      (routes) => {
-        routes.get('/upstream', (c) => {
-          if (vary) c.header('Vary', vary);
-          return c.html('<!doctype html><html lang="ja"><body>ok</body></html>');
-        });
-      },
-      { service },
-    );
+    createApexApp((routes) => {
+      routes.get('/upstream', (c) => {
+        if (vary) c.header('Vary', vary);
+        return c.html('<!doctype html><html lang="ja"><body>ok</body></html>');
+      });
+    });
 
   it('keeps a directive another layer already set', async () => {
     const response = await appWith('Origin').request('/upstream');

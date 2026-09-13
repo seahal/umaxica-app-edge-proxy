@@ -1,13 +1,15 @@
+import { CANONICAL_ORIGINS } from './publishing-cell';
+
 /*
- * This frame's public origin, and the only place it is written.
+ * This unit's public origin, and the only place it is chosen.
  *
- * `robots.txt` and `sitemap.xml` both name it, and they must not be allowed to
- * disagree — a sitemap that advertises one host while robots.txt points at
- * another is the kind of SEO fault that fails silently. `site-footer.tsx` keeps
- * its own copy with a trailing slash because it is display text rather than a
- * machine-read URL.
+ * `robots.txt`, `sitemap.xml`, every `<link rel="canonical">` and every hreflang
+ * alternate name it, and they must not disagree.
  *
- * It is per-brand: `org/info` and `com/info` carry their own value here, and a
- * copied APP value would be a real regression rather than a cosmetic one.
+ * Region (jp/us) is a build-time input: `vite.config.ts` replaces
+ * `import.meta.env.PUBLIC_REGION` with a literal, so one build serves one
+ * region. Anything other than `us` — including an unset variable under Vitest —
+ * selects `jp`, which is what every build script passes today.
  */
-export const CANONICAL_ORIGIN = 'https://info-jp.umaxica.app';
+export const CANONICAL_ORIGIN: string =
+  import.meta.env.PUBLIC_REGION === 'us' ? CANONICAL_ORIGINS.us : CANONICAL_ORIGINS.jp;

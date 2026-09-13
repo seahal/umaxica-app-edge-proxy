@@ -1,19 +1,9 @@
 {
   "features": {
-    "ghcr.io/joedmck/devcontainer-features/wrangler:1": {
-      "version": "1.0.0",
-      "resolved": "ghcr.io/joedmck/devcontainer-features/wrangler@sha256:fed4e30539e33daec9581180f80c60d3ef0aed516f4d733fae70071fdc7b880e",
-      "integrity": "sha256:fed4e30539e33daec9581180f80c60d3ef0aed516f4d733fae70071fdc7b880e"
-    },
     "ghcr.io/jsburckhardt/devcontainer-features/herdr:1": {
       "version": "1.0.0",
       "resolved": "ghcr.io/jsburckhardt/devcontainer-features/herdr@sha256:6cd1417ff2af435e4b320612f494288b219d3f5dd4ce5f967b510897f5c663f2",
       "integrity": "sha256:6cd1417ff2af435e4b320612f494288b219d3f5dd4ce5f967b510897f5c663f2"
-    },
-    "ghcr.io/marcosbolanos/devcontainer-features/neovim-prebuilt:1": {
-      "version": "1.0.0",
-      "resolved": "ghcr.io/marcosbolanos/devcontainer-features/neovim-prebuilt@sha256:bd1f7a64fc308f256a01c61946db094e0c92c4fd9d32f42b7ea8b661788d879d",
-      "integrity": "sha256:bd1f7a64fc308f256a01c61946db094e0c92c4fd9d32f42b7ea8b661788d879d"
     },
     "ghcr.io/nolanjx/devcontainer-features/codex:1": {
       "version": "1.0.0",

@@ -10,33 +10,38 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AboutRouteImport } from './routes/about'
+import { Route as LangRouteImport } from './routes/$lang'
 import { Route as HealthRouteImport } from './routes/health'
-import { Route as HealthDotjsonRouteImport } from './routes/health[.]json'
 import { Route as ManifestDotwebmanifestRouteImport } from './routes/manifest[.]webmanifest'
 import { Route as OfflineRouteImport } from './routes/offline'
 import { Route as RevisionRouteImport } from './routes/revision'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as LangIndexRouteImport } from './routes/$lang.index'
+import { Route as LangAboutRouteImport } from './routes/$lang.about'
+import { Route as LangSearchRouteImport } from './routes/$lang.search'
+import { Route as HealthLivenessesRouteImport } from './routes/health.livenesses'
+import { Route as HealthReadinessesRouteImport } from './routes/health.readinesses'
+import { Route as HealthStartupsRouteImport } from './routes/health.startups'
+import { Route as LangEntriesIndexRouteImport } from './routes/$lang.entries.index'
+import { Route as LangEntriesPublicIdRouteImport } from './routes/$lang.entries.$publicId'
+import { Route as ApiV0HealthDotjsonRouteImport } from './routes/api.v0.health[.]json'
+import { Route as ApiV0RevisionDotjsonRouteImport } from './routes/api.v0.revision[.]json'
+import { Route as LangEntriesPagePageRouteImport } from './routes/$lang.entries.page.$page'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
+const LangRoute = LangRouteImport.update({
+  id: '/$lang',
+  path: '/$lang',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HealthRoute = HealthRouteImport.update({
   id: '/health',
   path: '/health',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HealthDotjsonRoute = HealthDotjsonRouteImport.update({
-  id: '/health.json',
-  path: '/health.json',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ManifestDotwebmanifestRoute = ManifestDotwebmanifestRouteImport.update({
@@ -64,87 +69,201 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LangIndexRoute = LangIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LangRoute,
+} as any)
+const LangAboutRoute = LangAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => LangRoute,
+} as any)
+const LangSearchRoute = LangSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => LangRoute,
+} as any)
+const HealthLivenessesRoute = HealthLivenessesRouteImport.update({
+  id: '/livenesses',
+  path: '/livenesses',
+  getParentRoute: () => HealthRoute,
+} as any)
+const HealthReadinessesRoute = HealthReadinessesRouteImport.update({
+  id: '/readinesses',
+  path: '/readinesses',
+  getParentRoute: () => HealthRoute,
+} as any)
+const HealthStartupsRoute = HealthStartupsRouteImport.update({
+  id: '/startups',
+  path: '/startups',
+  getParentRoute: () => HealthRoute,
+} as any)
+const LangEntriesIndexRoute = LangEntriesIndexRouteImport.update({
+  id: '/entries/',
+  path: '/entries/',
+  getParentRoute: () => LangRoute,
+} as any)
+const LangEntriesPublicIdRoute = LangEntriesPublicIdRouteImport.update({
+  id: '/entries/$publicId',
+  path: '/entries/$publicId',
+  getParentRoute: () => LangRoute,
+} as any)
+const ApiV0HealthDotjsonRoute = ApiV0HealthDotjsonRouteImport.update({
+  id: '/api/v0/health.json',
+  path: '/api/v0/health.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiV0RevisionDotjsonRoute = ApiV0RevisionDotjsonRouteImport.update({
+  id: '/api/v0/revision.json',
+  path: '/api/v0/revision.json',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LangEntriesPagePageRoute = LangEntriesPagePageRouteImport.update({
+  id: '/entries/page/$page',
+  path: '/entries/page/$page',
+  getParentRoute: () => LangRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/health': typeof HealthRoute
-  '/health.json': typeof HealthDotjsonRoute
+  '/$lang': typeof LangRouteWithChildren
+  '/health': typeof HealthRouteWithChildren
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/offline': typeof OfflineRoute
   '/revision': typeof RevisionRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$lang/about': typeof LangAboutRoute
+  '/$lang/search': typeof LangSearchRoute
+  '/health/livenesses': typeof HealthLivenessesRoute
+  '/health/readinesses': typeof HealthReadinessesRoute
+  '/health/startups': typeof HealthStartupsRoute
+  '/$lang/': typeof LangIndexRoute
+  '/$lang/entries/$publicId': typeof LangEntriesPublicIdRoute
+  '/api/v0/health.json': typeof ApiV0HealthDotjsonRoute
+  '/api/v0/revision.json': typeof ApiV0RevisionDotjsonRoute
+  '/$lang/entries/': typeof LangEntriesIndexRoute
+  '/$lang/entries/page/$page': typeof LangEntriesPagePageRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/health': typeof HealthRoute
-  '/health.json': typeof HealthDotjsonRoute
+  '/health': typeof HealthRouteWithChildren
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/offline': typeof OfflineRoute
   '/revision': typeof RevisionRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$lang/about': typeof LangAboutRoute
+  '/$lang/search': typeof LangSearchRoute
+  '/health/livenesses': typeof HealthLivenessesRoute
+  '/health/readinesses': typeof HealthReadinessesRoute
+  '/health/startups': typeof HealthStartupsRoute
+  '/$lang': typeof LangIndexRoute
+  '/$lang/entries/$publicId': typeof LangEntriesPublicIdRoute
+  '/api/v0/health.json': typeof ApiV0HealthDotjsonRoute
+  '/api/v0/revision.json': typeof ApiV0RevisionDotjsonRoute
+  '/$lang/entries': typeof LangEntriesIndexRoute
+  '/$lang/entries/page/$page': typeof LangEntriesPagePageRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
-  '/health': typeof HealthRoute
-  '/health.json': typeof HealthDotjsonRoute
+  '/$lang': typeof LangRouteWithChildren
+  '/health': typeof HealthRouteWithChildren
   '/manifest.webmanifest': typeof ManifestDotwebmanifestRoute
   '/offline': typeof OfflineRoute
   '/revision': typeof RevisionRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/$lang/about': typeof LangAboutRoute
+  '/$lang/search': typeof LangSearchRoute
+  '/health/livenesses': typeof HealthLivenessesRoute
+  '/health/readinesses': typeof HealthReadinessesRoute
+  '/health/startups': typeof HealthStartupsRoute
+  '/$lang/': typeof LangIndexRoute
+  '/$lang/entries/$publicId': typeof LangEntriesPublicIdRoute
+  '/api/v0/health.json': typeof ApiV0HealthDotjsonRoute
+  '/api/v0/revision.json': typeof ApiV0RevisionDotjsonRoute
+  '/$lang/entries/': typeof LangEntriesIndexRoute
+  '/$lang/entries/page/$page': typeof LangEntriesPagePageRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/about'
+    | '/$lang'
     | '/health'
-    | '/health.json'
     | '/manifest.webmanifest'
     | '/offline'
     | '/revision'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/$lang/about'
+    | '/$lang/search'
+    | '/health/livenesses'
+    | '/health/readinesses'
+    | '/health/startups'
+    | '/$lang/'
+    | '/$lang/entries/$publicId'
+    | '/api/v0/health.json'
+    | '/api/v0/revision.json'
+    | '/$lang/entries/'
+    | '/$lang/entries/page/$page'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/about'
     | '/health'
-    | '/health.json'
     | '/manifest.webmanifest'
     | '/offline'
     | '/revision'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/$lang/about'
+    | '/$lang/search'
+    | '/health/livenesses'
+    | '/health/readinesses'
+    | '/health/startups'
+    | '/$lang'
+    | '/$lang/entries/$publicId'
+    | '/api/v0/health.json'
+    | '/api/v0/revision.json'
+    | '/$lang/entries'
+    | '/$lang/entries/page/$page'
   id:
     | '__root__'
     | '/'
-    | '/about'
+    | '/$lang'
     | '/health'
-    | '/health.json'
     | '/manifest.webmanifest'
     | '/offline'
     | '/revision'
     | '/robots.txt'
     | '/sitemap.xml'
+    | '/$lang/about'
+    | '/$lang/search'
+    | '/health/livenesses'
+    | '/health/readinesses'
+    | '/health/startups'
+    | '/$lang/'
+    | '/$lang/entries/$publicId'
+    | '/api/v0/health.json'
+    | '/api/v0/revision.json'
+    | '/$lang/entries/'
+    | '/$lang/entries/page/$page'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AboutRoute: typeof AboutRoute
-  HealthRoute: typeof HealthRoute
-  HealthDotjsonRoute: typeof HealthDotjsonRoute
+  LangRoute: typeof LangRouteWithChildren
+  HealthRoute: typeof HealthRouteWithChildren
   ManifestDotwebmanifestRoute: typeof ManifestDotwebmanifestRoute
   OfflineRoute: typeof OfflineRoute
   RevisionRoute: typeof RevisionRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiV0HealthDotjsonRoute: typeof ApiV0HealthDotjsonRoute
+  ApiV0RevisionDotjsonRoute: typeof ApiV0RevisionDotjsonRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -156,11 +275,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
+    '/$lang': {
+      id: '/$lang'
+      path: '/$lang'
+      fullPath: '/$lang'
+      preLoaderRoute: typeof LangRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/health': {
@@ -168,13 +287,6 @@ declare module '@tanstack/react-router' {
       path: '/health'
       fullPath: '/health'
       preLoaderRoute: typeof HealthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/health.json': {
-      id: '/health.json'
-      path: '/health.json'
-      fullPath: '/health.json'
-      preLoaderRoute: typeof HealthDotjsonRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/manifest.webmanifest': {
@@ -212,19 +324,132 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/$lang/': {
+      id: '/$lang/'
+      path: '/'
+      fullPath: '/$lang/'
+      preLoaderRoute: typeof LangIndexRouteImport
+      parentRoute: typeof LangRoute
+    }
+    '/$lang/about': {
+      id: '/$lang/about'
+      path: '/about'
+      fullPath: '/$lang/about'
+      preLoaderRoute: typeof LangAboutRouteImport
+      parentRoute: typeof LangRoute
+    }
+    '/$lang/search': {
+      id: '/$lang/search'
+      path: '/search'
+      fullPath: '/$lang/search'
+      preLoaderRoute: typeof LangSearchRouteImport
+      parentRoute: typeof LangRoute
+    }
+    '/health/livenesses': {
+      id: '/health/livenesses'
+      path: '/livenesses'
+      fullPath: '/health/livenesses'
+      preLoaderRoute: typeof HealthLivenessesRouteImport
+      parentRoute: typeof HealthRoute
+    }
+    '/health/readinesses': {
+      id: '/health/readinesses'
+      path: '/readinesses'
+      fullPath: '/health/readinesses'
+      preLoaderRoute: typeof HealthReadinessesRouteImport
+      parentRoute: typeof HealthRoute
+    }
+    '/health/startups': {
+      id: '/health/startups'
+      path: '/startups'
+      fullPath: '/health/startups'
+      preLoaderRoute: typeof HealthStartupsRouteImport
+      parentRoute: typeof HealthRoute
+    }
+    '/$lang/entries/': {
+      id: '/$lang/entries/'
+      path: '/entries'
+      fullPath: '/$lang/entries/'
+      preLoaderRoute: typeof LangEntriesIndexRouteImport
+      parentRoute: typeof LangRoute
+    }
+    '/$lang/entries/$publicId': {
+      id: '/$lang/entries/$publicId'
+      path: '/entries/$publicId'
+      fullPath: '/$lang/entries/$publicId'
+      preLoaderRoute: typeof LangEntriesPublicIdRouteImport
+      parentRoute: typeof LangRoute
+    }
+    '/api/v0/health.json': {
+      id: '/api/v0/health.json'
+      path: '/api/v0/health.json'
+      fullPath: '/api/v0/health.json'
+      preLoaderRoute: typeof ApiV0HealthDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/v0/revision.json': {
+      id: '/api/v0/revision.json'
+      path: '/api/v0/revision.json'
+      fullPath: '/api/v0/revision.json'
+      preLoaderRoute: typeof ApiV0RevisionDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$lang/entries/page/$page': {
+      id: '/$lang/entries/page/$page'
+      path: '/entries/page/$page'
+      fullPath: '/$lang/entries/page/$page'
+      preLoaderRoute: typeof LangEntriesPagePageRouteImport
+      parentRoute: typeof LangRoute
+    }
   }
 }
 
+interface LangRouteChildren {
+  LangAboutRoute: typeof LangAboutRoute
+  LangSearchRoute: typeof LangSearchRoute
+  LangIndexRoute: typeof LangIndexRoute
+  LangEntriesPublicIdRoute: typeof LangEntriesPublicIdRoute
+  LangEntriesIndexRoute: typeof LangEntriesIndexRoute
+  LangEntriesPagePageRoute: typeof LangEntriesPagePageRoute
+}
+
+const LangRouteChildren: LangRouteChildren = {
+  LangAboutRoute: LangAboutRoute,
+  LangSearchRoute: LangSearchRoute,
+  LangIndexRoute: LangIndexRoute,
+  LangEntriesPublicIdRoute: LangEntriesPublicIdRoute,
+  LangEntriesIndexRoute: LangEntriesIndexRoute,
+  LangEntriesPagePageRoute: LangEntriesPagePageRoute,
+}
+
+const LangRouteWithChildren = LangRoute._addFileChildren(LangRouteChildren)
+
+interface HealthRouteChildren {
+  HealthLivenessesRoute: typeof HealthLivenessesRoute
+  HealthReadinessesRoute: typeof HealthReadinessesRoute
+  HealthStartupsRoute: typeof HealthStartupsRoute
+}
+
+const HealthRouteChildren: HealthRouteChildren = {
+  HealthLivenessesRoute: HealthLivenessesRoute,
+  HealthReadinessesRoute: HealthReadinessesRoute,
+  HealthStartupsRoute: HealthStartupsRoute,
+}
+
+const HealthRouteWithChildren =
+  HealthRoute._addFileChildren(HealthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
-  HealthRoute: HealthRoute,
-  HealthDotjsonRoute: HealthDotjsonRoute,
+  LangRoute: LangRouteWithChildren,
+  HealthRoute: HealthRouteWithChildren,
   ManifestDotwebmanifestRoute: ManifestDotwebmanifestRoute,
   OfflineRoute: OfflineRoute,
   RevisionRoute: RevisionRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiV0HealthDotjsonRoute: ApiV0HealthDotjsonRoute,
+  ApiV0RevisionDotjsonRoute: ApiV0RevisionDotjsonRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -6,6 +6,11 @@
   "messages": { "title": "メッセージ", "wip": "準備中" },
   "notifications": { "title": "通知", "wip": "準備中" },
   "about": { "title": "概要" },
+  "publishing": {
+    "title": "パブリッシング",
+    "intro": "公開コンテンツの作成・更新・改訂・公開・アーカイブ・認可は、認証済みの Rails Publishing CMS が担当します。このページは 12 セルの管理入口です。",
+    "manage": "Rails で開く"
+  },
   "nav": {
     "skip": "本文へスキップ",
     "menu": "メニュー",

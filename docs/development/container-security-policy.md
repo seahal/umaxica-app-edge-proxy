@@ -29,7 +29,7 @@ developer shares and the only one the Dev Container loads, must contain neither
 `SSH_AUTH_SOCK` nor any `.ssh` path, and `.devcontainer/devcontainer.json` must contain
 neither either.
 
-The optional override is never required: `compose.yaml` alone is a complete standard
+The optional override is never required: the two tracked compose files are a complete standard
 environment, so a fresh clone starts with _none_ of the SSH inputs above. Adding them is
 an explicit, per-developer act — see
 [the compose file contract](../../README.md#the-three-compose-files).

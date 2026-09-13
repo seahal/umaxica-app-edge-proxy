@@ -856,21 +856,22 @@ every unit, page, error document and 429 response.
 A machine-readable or failure document with navigation in it is worse than one
 without.
 
-| Surface                           | What it is                                                                                                                                                                                                   |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `/health` (core, satellite)       | **JSON.** Edge state and Rails liveness in one document; `no-store`, `X-Robots-Tag: noindex`; **503 when Rails liveness fails** (ADR 009). Not a page. Do not add chrome, do not change the status contract. |
-| `/health`, `/health.html` (apex)  | **HTML**, but chrome-free: no `<header>`, no navigation, a `<dl>` of Worker status and a bare `<footer>© year BRAND</footer>` that is deliberately _not_ the shell footer.                                   |
-| `/health.json` (apex)             | JSON.                                                                                                                                                                                                        |
-| `/revision`                       | JSON.                                                                                                                                                                                                        |
-| `robots.txt`, `sitemap.xml`       | Generated routes.                                                                                                                                                                                            |
-| apex `/`                          | A region redirect, not a document.                                                                                                                                                                           |
-| 429 responses                     | Hand-written HTML; title contract applies, shell does not.                                                                                                                                                   |
-| 404 and 500 documents, `/offline` | **Archetype-dependent — see below.** Chrome-free on core; inside the shell on the satellites.                                                                                                                |
+| Surface                                 | What it is                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/health` (core, Astro, Hono aggregate) | **text/plain**, `Cache-Control: no-store`. Human-readable aggregate of startup/liveness/readiness. Not a page. No JSON, no HTML, no chrome. |
+| `/health/startups`                      | Kubernetes `startupProbe`. `text/plain` `ok`.                                                                                               |
+| `/health/livenesses`                    | Kubernetes `livenessProbe`. Runtime only; downstream outages must not fail it.                                                              |
+| `/health/readinesses`                   | Kubernetes `readinessProbe`. `text/plain`; `503` only when this instance must not receive traffic.                                          |
+| `/health.html`, `/health.json`          | **Not health documents.** Apex, cores and Astro answer 404 HTML. `Accept: application/json` does not change that.                           |
+| `/revision`                             | **text/plain** compact Worker version id. Not JSON, not HTML.                                                                               |
+| `/api/v0/revision.json`                 | **application/json** `{ id, tag, timestamp }`. Same metadata authority as `/revision`. Not health.                                          |
+| `robots.txt`, `sitemap.xml`             | Generated routes.                                                                                                                           |
+| apex `/`                                | A region redirect, not a document.                                                                                                          |
+| 429 responses                           | Hand-written HTML; title contract applies, shell does not.                                                                                  |
+| 404 and 500 documents, `/offline`       | **Archetype-dependent — see below.** Chrome-free on core; inside the shell on the satellites.                                               |
 
-Note that `/health` means different things in different archetypes — Edge+Rails
-with a 503 path on core and satellite, Worker-only with a 200 on apex. That is a
-real difference in what the endpoint answers, not a shell question, and it is
-recorded here only so nobody "unifies" the two by accident.
+The four probe URLs are the same on Core, Astro, and Hono. `/health.html` and
+`/health.json` are not served.
 
 ### The failure documents are only chrome-free on core
 

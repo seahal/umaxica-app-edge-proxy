@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "EDGE_LOCAL_NODE_RUNTIME=1 CLOUDFLARE_ENV=local vite dev --port 5405 --host",
-    "dev:vpc": "CLOUDFLARE_ENV=vpc vite dev --port 5405 --host",
+    "dev": "CLOUDFLARE_ENV=local vite dev --port 5405 --host",
     "build": "CLOUDFLARE_ENV= vite build",
     "preview": "pnpm run build && CLOUDFLARE_ENV= vite preview --port 5405",
     "deploy": "pnpm run build && CLOUDFLARE_ENV= wrangler deploy",
@@ -17,6 +16,7 @@
     "typecheck": "pnpm run cf-typegen && tsc --noEmit",
     "test": "vitest run",
     "test:cov": "vitest run --coverage",
+    "test:stress": "vitest run --sequence.shuffle --no-cache",
     "test:api": "node api/run.mjs",
     "test:e2e": "playwright test",
     "knip": "knip --treat-config-hints-as-errors",

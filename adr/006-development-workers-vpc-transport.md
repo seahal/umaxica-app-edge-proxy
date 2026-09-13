@@ -2,6 +2,31 @@
 
 ## Status: Implemented and verified end to end
 
+> **AMENDED 2026-09-05 — the resource identifiers below are historical.** The
+> account no longer holds "exactly one VPC Service", and the one named
+> throughout this record has been retired from configuration:
+>
+> |             | Recorded here                                              | Since 2026-09-05                                                              |
+> | :---------- | :--------------------------------------------------------- | :---------------------------------------------------------------------------- |
+> | VPC Service | `019f5fe0-…` `umaxica-apps-edge-cf-workers-vpc`            | `01a06fd0-89b7-7613-9e1d-f7d07c693273` `umaxica-dev-rails-api`                |
+> | Tunnel      | `1d501e9a-…` (`Auth`, shared with the published hostnames) | `03a4a67c-2aca-4f2c-9aeb-d1666f18bc87` (`umaxica-dev-workers-vpc`, dedicated) |
+> | Target host | `core.app.localhost` HTTP:3000                             | `core-workers-vpc.internal` HTTP:3000                                         |
+>
+> Two corrections matter beyond the identifiers. First, this record states the
+> service terminated on `core.app.localhost`; it did not. `wrangler vpc service
+get` reported the raw Podman address `10.89.2.2`, because RFC 6761 makes glibc
+> resolve any name under `localhost.` to loopback before a container resolver is
+> consulted, so no `*.localhost` alias can serve as a VPC Service target. Second,
+> binding the service to the `Auth` tunnel coupled this transport to the tunnel
+> that also serves the ten Access-protected browser hostnames.
+>
+> The decisions in this record are unchanged: the binding name, its placement
+> across environments, the `remote: true` requirement, and the credential cost
+> all still hold. Only the backing resources moved, exactly as the "AWS cutover"
+> paragraph anticipated — `tools/workers-manifest.json` remains the single source
+> of the id. See `evidence/2026-09-05-workers-vpc-dedicated-tunnel.md` and the
+> Global repository's `docs/operations/cloudflare-private-origin.md`.
+
 ## Amends
 
 [ADR 005](005-rails-edge-workers-vpc-connection.md). That record stands except
